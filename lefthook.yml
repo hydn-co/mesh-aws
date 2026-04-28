@@ -1,0 +1,11 @@
+pre-commit:
+  commands:
+    vet:
+      run: go vet ./...
+    test:
+      run: go test ./...
+
+pre-push:
+  commands:
+    build:
+      run: go build ./...
