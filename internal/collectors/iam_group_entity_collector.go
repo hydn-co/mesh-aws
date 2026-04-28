@@ -3,7 +3,6 @@ package collectors
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -60,8 +59,6 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 			group.Name = aws.ToString(g.GroupName)
 			if g.CreateDate != nil {
 				group.CreatedAt = *g.CreateDate
-			} else {
-				group.CreatedAt = time.Time{}
 			}
 
 			if err := c.ctx.Emit(ctx, group); err != nil {
