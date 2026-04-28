@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -38,28 +36,30 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
 	count := 0
-	paginator := iam.NewListGroupsPaginator(client.IAM, &iam.ListGroupsInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+	var marker string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		groups, truncated, nextMarker, err := client.ListGroups(ctx, "", marker)
 		if err != nil {
 			logCollectError(name, err)
 			return fmt.Errorf("list IAM groups: %w", err)
 		}
 
-		for _, g := range page.Groups {
+		for _, g := range groups {
 			group := entities.NewGroup()
-			group.GroupRef = aws.ToString(g.GroupName)
-			group.Name = aws.ToString(g.GroupName)
-			if g.CreateDate != nil {
-				group.CreatedAt = *g.CreateDate
-			}
+			group.GroupRef = g.GroupName
+			group.Name = g.GroupName
+			group.CreatedAt = g.CreateDate
 
 			if err := c.ctx.Emit(ctx, group); err != nil {
 				logCollectError(name, err)
@@ -67,6 +67,11 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 			}
 			count++
 		}
+
+		if !truncated {
+			break
+		}
+		marker = nextMarker
 	}
 
 	logCollectDone(name, count)

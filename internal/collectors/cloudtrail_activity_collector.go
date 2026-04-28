@@ -6,9 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
-	cttypes "github.com/aws/aws-sdk-go-v2/service/cloudtrail/types"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -21,14 +18,14 @@ import (
 
 // cloudTrailEventDetail is the parsed structure of the CloudTrailEvent JSON string.
 type cloudTrailEventDetail struct {
-	EventID         string                 `json:"eventID"`
-	EventTime       time.Time              `json:"eventTime"`
-	SourceIPAddress string                 `json:"sourceIPAddress"`
-	UserAgent       string                 `json:"userAgent"`
-	UserIdentity    cloudTrailUserIdentity `json:"userIdentity"`
-	ResponseElements map[string]string     `json:"responseElements"`
-	ErrorCode       string                 `json:"errorCode,omitempty"`
-	ErrorMessage    string                 `json:"errorMessage,omitempty"`
+	EventID          string                 `json:"eventID"`
+	EventTime        time.Time              `json:"eventTime"`
+	SourceIPAddress  string                 `json:"sourceIPAddress"`
+	UserAgent        string                 `json:"userAgent"`
+	UserIdentity     cloudTrailUserIdentity `json:"userIdentity"`
+	ResponseElements map[string]string      `json:"responseElements"`
+	ErrorCode        string                 `json:"errorCode,omitempty"`
+	ErrorMessage     string                 `json:"errorMessage,omitempty"`
 }
 
 type cloudTrailUserIdentity struct {
@@ -60,42 +57,38 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
-	input := &cloudtrail.LookupEventsInput{
-		LookupAttributes: []cttypes.LookupAttribute{
-			{
-				AttributeKey:   cttypes.LookupAttributeKeyEventName,
-				AttributeValue: aws.String("ConsoleLogin"),
-			},
-		},
-	}
-
 	// Support resume from last event time.
+	var startTime *time.Time
 	if payload := c.ctx.GetPayload(); payload != nil && payload.LastEventTime != nil {
-		input.StartTime = payload.LastEventTime
+		startTime = payload.LastEventTime
 	}
 
 	count := 0
-	paginator := cloudtrail.NewLookupEventsPaginator(client.CloudTrail, input)
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+	var nextToken string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		evts, token, err := client.LookupEvents(ctx, "ConsoleLogin", startTime, nextToken)
 		if err != nil {
 			logCollectError(name, err)
 			return fmt.Errorf("lookup CloudTrail events: %w", err)
 		}
 
-		for _, e := range page.Events {
-			if e.CloudTrailEvent == nil {
+		for _, e := range evts {
+			if e.CloudTrailEvent == "" {
 				continue
 			}
 
 			var detail cloudTrailEventDetail
-			if err := json.Unmarshal([]byte(aws.ToString(e.CloudTrailEvent)), &detail); err != nil {
+			if err := json.Unmarshal([]byte(e.CloudTrailEvent), &detail); err != nil {
 				logCollectError(name, fmt.Errorf("parse CloudTrail event JSON: %w", err))
 				continue
 			}
@@ -113,12 +106,12 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 
 			eventRef := detail.EventID
 			if eventRef == "" {
-				eventRef = aws.ToString(e.EventId)
+				eventRef = e.EventID
 			}
 
 			ts := detail.EventTime
-			if ts.IsZero() && e.EventTime != nil {
-				ts = *e.EventTime
+			if ts.IsZero() {
+				ts = e.EventTime
 			}
 
 			consoleLogin := detail.ResponseElements["ConsoleLogin"]
@@ -165,6 +158,11 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 			}
 			count++
 		}
+
+		if token == "" {
+			break
+		}
+		nextToken = token
 	}
 
 	logCollectDone(name, count)

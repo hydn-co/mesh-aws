@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -39,30 +37,34 @@ func (c *IAMUserEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
 	count := 0
-	paginator := iam.NewListUsersPaginator(client.IAM, &iam.ListUsersInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+	var marker string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		users, truncated, nextMarker, err := client.ListUsers(ctx, "", marker)
 		if err != nil {
 			logCollectError(name, err)
 			return fmt.Errorf("list IAM users: %w", err)
 		}
 
-		for _, u := range page.Users {
+		for _, u := range users {
 			account := entities.NewAccount()
-			account.AccountRef = aws.ToString(u.UserName)
-			account.Name = aws.ToString(u.UserName)
-			account.DisplayName = aws.ToString(u.UserName)
+			account.AccountRef = u.UserName
+			account.Name = u.UserName
+			account.DisplayName = u.UserName
 			account.AccountType = types.AccountTypeUser
 			account.Enabled = true
-			if u.CreateDate != nil {
-				account.CreatedAt = u.CreateDate
+			if !u.CreateDate.IsZero() {
+				account.CreatedAt = &u.CreateDate
 			}
 
 			if err := c.ctx.Emit(ctx, account); err != nil {
@@ -71,6 +73,11 @@ func (c *IAMUserEntityCollector) Start(ctx context.Context) error {
 			}
 			count++
 		}
+
+		if !truncated {
+			break
+		}
+		marker = nextMarker
 	}
 
 	logCollectDone(name, count)

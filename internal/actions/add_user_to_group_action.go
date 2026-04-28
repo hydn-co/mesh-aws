@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -42,17 +40,13 @@ func (a *AddUserToGroupAction) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logActionError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
-	_, err = client.IAM.AddUserToGroup(ctx, &iam.AddUserToGroupInput{
-		UserName:  aws.String(payload.UserName),
-		GroupName: aws.String(payload.GroupName),
-	})
-	if err != nil {
+	if err := client.AddUserToGroup(ctx, payload.UserName, payload.GroupName); err != nil {
 		logActionError(name, err)
 		return fmt.Errorf("add user %q to group %q: %w", payload.UserName, payload.GroupName, err)
 	}

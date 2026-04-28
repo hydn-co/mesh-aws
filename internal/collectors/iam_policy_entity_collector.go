@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
-	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -40,28 +37,30 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
 	count := 0
-	paginator := iam.NewListPoliciesPaginator(client.IAM, &iam.ListPoliciesInput{
-		Scope: iamtypes.PolicyScopeTypeLocal,
-	})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+	var marker string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		policies, truncated, nextMarker, err := client.ListPolicies(ctx, "Local", marker)
 		if err != nil {
 			logCollectError(name, err)
 			return fmt.Errorf("list IAM policies: %w", err)
 		}
 
-		for _, p := range page.Policies {
+		for _, p := range policies {
 			policy := entities.NewPolicy()
-			policy.PolicyRef = aws.ToString(p.PolicyName)
-			policy.Name = aws.ToString(p.PolicyName)
-			policy.Description = aws.ToString(p.Description)
+			policy.PolicyRef = p.PolicyName
+			policy.Name = p.PolicyName
+			policy.Description = p.Description
 			policy.PolicyType = types.PolicyTypeAuthorization
 			policy.State = "enabled"
 
@@ -71,6 +70,11 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 			}
 			count++
 		}
+
+		if !truncated {
+			break
+		}
+		marker = nextMarker
 	}
 
 	logCollectDone(name, count)

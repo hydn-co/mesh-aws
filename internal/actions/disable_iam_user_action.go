@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -43,7 +41,7 @@ func (a *DisableIAMUserAction) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logActionError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
@@ -51,52 +49,36 @@ func (a *DisableIAMUserAction) Start(ctx context.Context) error {
 
 	userName := payload.UserName
 
-	// 1. Delete login profile (ignores NoSuchEntity if user has no password).
-	_, err = client.IAM.DeleteLoginProfile(ctx, &iam.DeleteLoginProfileInput{
-		UserName: aws.String(userName),
-	})
-	if err != nil {
+	// 1. Delete login profile (silently ignores NoSuchEntity when the user has no password).
+	if err := client.DeleteLoginProfile(ctx, userName); err != nil {
 		logActionError(name, fmt.Errorf("delete login profile for %q: %w", userName, err))
-		// Non-fatal: user may not have a console login profile.
+		return fmt.Errorf("delete login profile: %w", err)
 	}
 
 	// 2. Deactivate all access keys.
-	keysOut, err := client.IAM.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
-		UserName: aws.String(userName),
-	})
+	keys, err := client.ListAccessKeys(ctx, userName)
 	if err != nil {
 		logActionError(name, err)
 		return fmt.Errorf("list access keys for %q: %w", userName, err)
 	}
 
-	for _, key := range keysOut.AccessKeyMetadata {
-		_, err := client.IAM.UpdateAccessKey(ctx, &iam.UpdateAccessKeyInput{
-			UserName:    aws.String(userName),
-			AccessKeyId: key.AccessKeyId,
-			Status:      "Inactive",
-		})
-		if err != nil {
-			logActionError(name, fmt.Errorf("deactivate access key %q: %w", aws.ToString(key.AccessKeyId), err))
+	for _, key := range keys {
+		if err := client.UpdateAccessKey(ctx, userName, key.AccessKeyID, "Inactive"); err != nil {
+			logActionError(name, fmt.Errorf("deactivate access key %q: %w", key.AccessKeyID, err))
 			return fmt.Errorf("deactivate access key: %w", err)
 		}
 	}
 
 	// 3. Deactivate all MFA devices.
-	mfaOut, err := client.IAM.ListMFADevices(ctx, &iam.ListMFADevicesInput{
-		UserName: aws.String(userName),
-	})
+	devices, err := client.ListMFADevices(ctx, userName)
 	if err != nil {
 		logActionError(name, err)
 		return fmt.Errorf("list MFA devices for %q: %w", userName, err)
 	}
 
-	for _, device := range mfaOut.MFADevices {
-		_, err := client.IAM.DeactivateMFADevice(ctx, &iam.DeactivateMFADeviceInput{
-			UserName:     aws.String(userName),
-			SerialNumber: device.SerialNumber,
-		})
-		if err != nil {
-			logActionError(name, fmt.Errorf("deactivate MFA device %q: %w", aws.ToString(device.SerialNumber), err))
+	for _, device := range devices {
+		if err := client.DeactivateMFADevice(ctx, userName, device.SerialNumber); err != nil {
+			logActionError(name, fmt.Errorf("deactivate MFA device %q: %w", device.SerialNumber, err))
 			return fmt.Errorf("deactivate MFA device: %w", err)
 		}
 	}

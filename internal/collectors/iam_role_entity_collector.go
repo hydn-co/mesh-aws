@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -38,26 +36,30 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(ctx, creds)
+	client, err := api.New(creds)
 	if err != nil {
 		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
 	count := 0
-	paginator := iam.NewListRolesPaginator(client.IAM, &iam.ListRolesInput{})
-	for paginator.HasMorePages() {
-		page, err := paginator.NextPage(ctx)
+	var marker string
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		roles, truncated, nextMarker, err := client.ListRoles(ctx, "", marker)
 		if err != nil {
 			logCollectError(name, err)
 			return fmt.Errorf("list IAM roles: %w", err)
 		}
 
-		for _, r := range page.Roles {
+		for _, r := range roles {
 			role := entities.NewRole()
-			role.RoleRef = aws.ToString(r.RoleName)
-			role.Name = aws.ToString(r.RoleName)
-			role.Description = aws.ToString(r.Description)
+			role.RoleRef = r.RoleName
+			role.Name = r.RoleName
+			role.Description = r.Description
 
 			if err := c.ctx.Emit(ctx, role); err != nil {
 				logCollectError(name, err)
@@ -65,6 +67,11 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 			}
 			count++
 		}
+
+		if !truncated {
+			break
+		}
+		marker = nextMarker
 	}
 
 	logCollectDone(name, count)
