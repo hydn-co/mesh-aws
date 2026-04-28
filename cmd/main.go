@@ -9,15 +9,10 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
-const (
-	secretTemplateName = "AWS Access Key"
-	version            = ""
-)
-
 func main() {
 	manifest := runner.CreateManifest(
 		"aws",
-		version,
+		"",
 		"Amazon Web Services",
 		"Collects IAM users, groups, roles, policies and CloudTrail activity from AWS.",
 	)
@@ -27,7 +22,7 @@ func main() {
 		true, runner.FeatureTypeCollector,
 		&options.UsersOptions{}, nil,
 		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.UsersOptions, *payloads.ActivityResumePayload](collectors.NewIAMUserEntityCollector),
+		runner.Factory(collectors.NewIAMUserEntityCollector),
 	)
 
 	mustRegister(manifest, "collect-groups", "Collect IAM Groups",
@@ -35,7 +30,7 @@ func main() {
 		true, runner.FeatureTypeCollector,
 		&options.GroupsOptions{}, nil,
 		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.GroupsOptions, *payloads.ActivityResumePayload](collectors.NewIAMGroupEntityCollector),
+		runner.Factory(collectors.NewIAMGroupEntityCollector),
 	)
 
 	mustRegister(manifest, "collect-roles", "Collect IAM Roles",
@@ -43,31 +38,112 @@ func main() {
 		true, runner.FeatureTypeCollector,
 		&options.RolesOptions{}, nil,
 		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.RolesOptions, *payloads.ActivityResumePayload](collectors.NewIAMRoleEntityCollector),
+		runner.Factory(collectors.NewIAMRoleEntityCollector),
 	)
 
-	mustRegister(manifest, "collect-policies", "Collect IAM Policies",
+	mustRegister(
+		manifest,
+		"collect-policies",
+		"Collect IAM Policies",
 		"Lists all customer-managed IAM policies and emits Policy entities.",
-		true, runner.FeatureTypeCollector,
-		&options.PoliciesOptions{}, nil,
+		true,
+		runner.FeatureTypeCollector,
+		&options.PoliciesOptions{},
+		nil,
 		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.PoliciesOptions, *payloads.ActivityResumePayload](collectors.NewIAMPolicyEntityCollector),
+		runner.Factory(
+			collectors.NewIAMPolicyEntityCollector,
+		),
 	)
 
-	mustRegister(manifest, "collect-activity", "Collect CloudTrail Activity",
+	mustRegister(
+		manifest,
+		"collect-virtual-mfa-devices",
+		"Collect IAM Virtual MFA Devices",
+		"Lists IAM virtual MFA devices and emits multi-factor entities and account bindings.",
+		true,
+		runner.FeatureTypeCollector,
+		&options.VirtualMFADevicesOptions{},
+		nil,
+		runner.FeatureResumeBehaviorNone,
+		runner.Factory(
+			collectors.NewIAMVirtualMFADeviceEntityCollector,
+		),
+	)
+
+	mustRegister(
+		manifest,
+		"collect-identity-store-users",
+		"Collect Identity Store Users",
+		"Lists AWS Identity Store users and emits account entities.",
+		true,
+		runner.FeatureTypeCollector,
+		&options.IdentityStoreUsersOptions{},
+		nil,
+		runner.FeatureResumeBehaviorNone,
+		runner.Factory(
+			collectors.NewIdentityStoreUserEntityCollector,
+		),
+	)
+
+	mustRegister(
+		manifest,
+		"collect-identity-store-groups",
+		"Collect Identity Store Groups",
+		"Lists AWS Identity Store groups and emits group entities.",
+		true,
+		runner.FeatureTypeCollector,
+		&options.IdentityStoreGroupsOptions{},
+		nil,
+		runner.FeatureResumeBehaviorNone,
+		runner.Factory(
+			collectors.NewIdentityStoreGroupEntityCollector,
+		),
+	)
+
+	mustRegister(
+		manifest,
+		"collect-master-account",
+		"Collect Organization Master Account",
+		"Describes the AWS organization and emits the management account as an account entity.",
+		true,
+		runner.FeatureTypeCollector,
+		&options.MasterAccountOptions{},
+		nil,
+		runner.FeatureResumeBehaviorNone,
+		runner.Factory(
+			collectors.NewMasterAccountEntityCollector,
+		),
+	)
+
+	mustRegister(
+		manifest,
+		"collect-activity",
+		"Collect CloudTrail Activity",
 		"Collects ConsoleLogin events from CloudTrail and emits login activity events.",
-		true, runner.FeatureTypeCollector,
-		&options.ActivityOptions{}, &payloads.ActivityResumePayload{},
+		true,
+		runner.FeatureTypeCollector,
+		&options.ActivityOptions{},
+		nil,
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.Factory[*options.ActivityOptions, *payloads.ActivityResumePayload](collectors.NewCloudTrailActivityCollector),
+		runner.Factory(
+			collectors.NewCloudTrailActivityCollector,
+		),
 	)
 
-	mustRegister(manifest, "disable-user", "Disable IAM User",
-		"Deletes the login profile, deactivates access keys and MFA devices for an IAM user.",
-		false, runner.FeatureTypeAction,
-		&options.UsersOptions{}, &payloads.DisableUserPayload{},
-		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.UsersOptions, *payloads.DisableUserPayload](actions.NewDisableIAMUserAction),
+	mustRegister(
+		manifest,
+		"collect-sso-activity",
+		"Collect AWS SSO Activity",
+		"Collects AWS SSO login activity from CloudTrail and emits login activity events.",
+		true,
+		runner.FeatureTypeCollector,
+		&options.SSOActivityOptions{},
+		nil,
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.Factory(
+			collectors.NewSSOLoginActivityCollector,
+		),
 	)
 
 	mustRegister(manifest, "add-user-to-group", "Add User to Group",
@@ -75,15 +151,7 @@ func main() {
 		false, runner.FeatureTypeAction,
 		&options.GroupsOptions{}, &payloads.AddUserToGroupPayload{},
 		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.GroupsOptions, *payloads.AddUserToGroupPayload](actions.NewAddUserToGroupAction),
-	)
-
-	mustRegister(manifest, "remove-user-from-group", "Remove User from Group",
-		"Removes an IAM user from an IAM group.",
-		false, runner.FeatureTypeAction,
-		&options.GroupsOptions{}, &payloads.RemoveUserFromGroupPayload{},
-		runner.FeatureResumeBehaviorNone,
-		runner.Factory[*options.GroupsOptions, *payloads.RemoveUserFromGroupPayload](actions.NewRemoveUserFromGroupAction),
+		runner.Factory(actions.NewAddUserToGroupAction),
 	)
 
 	runner.Run(manifest)
@@ -103,7 +171,7 @@ func mustRegister(
 		name, displayName, description,
 		schedulable, featureType,
 		opts, payload,
-		resumeBehavior, secretTemplateName,
+		resumeBehavior, "AWS Access Key",
 		factory,
 	); err != nil {
 		panic("register feature " + name + ": " + err.Error())

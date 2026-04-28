@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -22,7 +23,12 @@ const (
 	iamRegion   = "us-east-1"
 	iamVersion  = "2010-05-08"
 
-	cloudtrailService = "cloudtrail"
+	cloudtrailEndpoint    = "https://cloudtrail.%s.amazonaws.com/"
+	cloudtrailService     = "cloudtrail"
+	identityStoreEndpoint = "https://identitystore.%s.amazonaws.com/"
+	identityStoreService  = "identitystore"
+	organizationsEndpoint = "https://organizations.%s.amazonaws.com/"
+	organizationsService  = "organizations"
 
 	awsDateTimeFormat = "20060102T150405Z"
 	awsDateFormat     = "20060102"
@@ -34,8 +40,8 @@ type Client struct {
 	http  *http.Client
 }
 
-// New creates a new Client from the given credentials.
-func New(creds *credentials.AWSCredentials) (*Client, error) {
+// NewClient creates a new Client from the given credentials.
+func NewClient(creds *credentials.AWSCredentials) (*Client, error) {
 	if creds == nil {
 		return nil, fmt.Errorf("credentials are required")
 	}
@@ -50,7 +56,11 @@ func New(creds *credentials.AWSCredentials) (*Client, error) {
 func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte, error) {
 	params["Version"] = iamVersion
 
-	body := encodeForm(params)
+	v := url.Values{}
+	for k, val := range params {
+		v.Set(k, val)
+	}
+	body := v.Encode()
 	bodyBytes := []byte(body)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, iamEndpoint, bytes.NewReader(bodyBytes))
@@ -65,7 +75,9 @@ func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte,
 	if err != nil {
 		return nil, fmt.Errorf("execute IAM request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -80,30 +92,46 @@ func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte,
 
 // cloudtrailPost sends a signed POST to the CloudTrail JSON API.
 func (c *Client) cloudtrailPost(ctx context.Context, target string, body []byte) ([]byte, error) {
-	endpoint := "https://cloudtrail." + c.creds.Region + ".amazonaws.com/"
+	endpoint := fmt.Sprintf(cloudtrailEndpoint, c.creds.Region)
+	return c.awsJSONPost(ctx, endpoint, target, cloudtrailService, body)
+}
+
+func (c *Client) identityStorePost(ctx context.Context, target string, body []byte) ([]byte, error) {
+	endpoint := fmt.Sprintf(identityStoreEndpoint, c.creds.Region)
+	return c.awsJSONPost(ctx, endpoint, target, identityStoreService, body)
+}
+
+func (c *Client) organizationsPost(ctx context.Context, target string, body []byte) ([]byte, error) {
+	endpoint := fmt.Sprintf(organizationsEndpoint, c.creds.Region)
+	return c.awsJSONPost(ctx, endpoint, target, organizationsService, body)
+}
+
+func (c *Client) awsJSONPost(ctx context.Context, endpoint, target, service string, body []byte) ([]byte, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("create CloudTrail request: %w", err)
+		return nil, fmt.Errorf("create %s request: %w", service, err)
 	}
 	req.Header.Set("Content-Type", "application/x-amz-json-1.1")
 	req.Header.Set("X-Amz-Target", target)
 
-	c.sign(req, cloudtrailService, c.creds.Region, body)
+	c.sign(req, service, c.creds.Region, body)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute CloudTrail request: %w", err)
+		return nil, fmt.Errorf("execute %s request: %w", service, err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read CloudTrail response body: %w", err)
+		return nil, fmt.Errorf("read %s response body: %w", service, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("cloudtrail HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		return nil, fmt.Errorf("%s HTTP %d: %s", service, resp.StatusCode, strings.TrimSpace(string(data)))
 	}
 	return data, nil
 }
@@ -158,9 +186,9 @@ func (c *Client) sign(req *http.Request, service, region string, body []byte) {
 // buildCanonicalHeaders returns the canonical headers string and the signed-headers string
 // required by SigV4, built from req's current headers plus the implicit Host header.
 func buildCanonicalHeaders(req *http.Request) (canonical, signed string) {
-	headers := map[string]string{
-		"host": req.URL.Host,
-	}
+	headers := make(map[string]string)
+	headers["host"] = req.URL.Host
+
 	for k, vs := range req.Header {
 		headers[strings.ToLower(k)] = strings.TrimSpace(strings.Join(vs, ","))
 	}
@@ -197,41 +225,4 @@ func hmacSHA256(key, data []byte) []byte {
 func hexSHA256(data []byte) string {
 	h := sha256.Sum256(data)
 	return hex.EncodeToString(h[:])
-}
-
-// encodeForm URL-encodes a map of string parameters into a sorted query string.
-// Sorting ensures a stable body, which is needed for correct body hashing in SigV4.
-func encodeForm(params map[string]string) string {
-	keys := make([]string, 0, len(params))
-	for k := range params {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var sb strings.Builder
-	for i, k := range keys {
-		if i > 0 {
-			sb.WriteByte('&')
-		}
-		sb.WriteString(urlEncode(k))
-		sb.WriteByte('=')
-		sb.WriteString(urlEncode(params[k]))
-	}
-	return sb.String()
-}
-
-// urlEncode percent-encodes a string per RFC 3986, as required by the IAM Query API
-// and AWS SigV4 canonical query-string encoding.
-func urlEncode(s string) string {
-	const safe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~"
-	var sb strings.Builder
-	for i := range len(s) {
-		c := s[i]
-		if strings.IndexByte(safe, c) >= 0 {
-			sb.WriteByte(c)
-		} else {
-			sb.WriteString(fmt.Sprintf("%%%02X", c))
-		}
-	}
-	return sb.String()
 }

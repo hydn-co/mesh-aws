@@ -3,11 +3,12 @@ package collectors
 import (
 	"context"
 	"fmt"
+	"log/slog"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
+	"github.com/hydn-co/mesh-aws/internal/helpers"
 	"github.com/hydn-co/mesh-aws/internal/options"
-	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
@@ -15,32 +16,52 @@ import (
 
 // IAMRoleEntityCollector lists IAM roles and emits Role entities.
 type IAMRoleEntityCollector struct {
-	ctx *connector.TypedFeatureContext[*options.RolesOptions, *payloads.ActivityResumePayload]
+	*connector.TypedFeatureContext[*options.RolesOptions, *connector.NoPayload]
+	client      *api.Client
+	initialized bool
 }
 
 // NewIAMRoleEntityCollector constructs the collector with the given feature context.
-func NewIAMRoleEntityCollector(ctx *connector.TypedFeatureContext[*options.RolesOptions, *payloads.ActivityResumePayload]) runner.Feature {
-	return &IAMRoleEntityCollector{ctx: ctx}
+func NewIAMRoleEntityCollector(
+	ctx *connector.TypedFeatureContext[*options.RolesOptions, *connector.NoPayload],
+) runner.Feature {
+	return &IAMRoleEntityCollector{TypedFeatureContext: ctx}
 }
 
-func (c *IAMRoleEntityCollector) Init(_ context.Context) error { return nil }
-func (c *IAMRoleEntityCollector) Stop(_ context.Context) error { return nil }
-
-func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
-	const name = "iam-role-entity-collector"
-	logCollectStart(name)
-
-	creds, err := credentials.Parse(c.ctx.GetCredentials())
+func (c *IAMRoleEntityCollector) Init(ctx context.Context) error {
+	creds, err := credentials.Parse(c.GetCredentials())
 	if err != nil {
-		logCollectError(name, err)
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(creds)
+	client, err := api.NewClient(creds)
 	if err != nil {
-		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
+
+	c.client = client
+	c.initialized = true
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM role collector")
+	return nil
+}
+
+func (c *IAMRoleEntityCollector) Stop(ctx context.Context) error {
+	if err := helpers.CheckInitialized(c.initialized); err != nil {
+		return err
+	}
+
+	c.client = nil
+	c.initialized = false
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM role collector")
+	return nil
+}
+
+func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
+	if err := helpers.CheckInitialized(c.initialized); err != nil {
+		return err
+	}
+
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM role collection")
 
 	count := 0
 	var marker string
@@ -49,20 +70,29 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 			return err
 		}
 
-		roles, truncated, nextMarker, err := client.ListRoles(ctx, "", marker)
+		roles, truncated, nextMarker, err := c.client.ListRoles(ctx, "", marker)
 		if err != nil {
-			logCollectError(name, err)
+			logCollector(ctx, c.TypedFeatureContext, slog.LevelError, "failed to list IAM roles", "error", err)
 			return fmt.Errorf("list IAM roles: %w", err)
 		}
 
 		for _, r := range roles {
 			role := entities.NewRole()
-			role.RoleRef = r.RoleName
+			role.RoleRef = r.RoleID
 			role.Name = r.RoleName
 			role.Description = r.Description
 
-			if err := c.ctx.Emit(ctx, role); err != nil {
-				logCollectError(name, err)
+			if err := c.Emit(ctx, role); err != nil {
+				logCollector(
+					ctx,
+					c.TypedFeatureContext,
+					slog.LevelError,
+					"failed to emit IAM role",
+					"role_ref",
+					role.RoleRef,
+					"error",
+					err,
+				)
 				return fmt.Errorf("emit role: %w", err)
 			}
 			count++
@@ -74,6 +104,6 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 		marker = nextMarker
 	}
 
-	logCollectDone(name, count)
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished IAM role collection", "count", count)
 	return nil
 }

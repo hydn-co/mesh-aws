@@ -52,6 +52,14 @@ type IAMMFADevice struct {
 	SerialNumber string
 }
 
+// IAMVirtualMFADevice represents an assigned virtual MFA device.
+type IAMVirtualMFADevice struct {
+	SerialNumber string
+	EnableDate   time.Time
+	UserID       string
+	UserName     string
+}
+
 // ---- IAM XML response structs (unexported) ----------------------------------
 
 type iamUserXML struct {
@@ -95,7 +103,7 @@ func (g iamGroupXML) toIAMGroup() IAMGroup {
 // listUsersResp maps the XML response from ListUsers.
 type listUsersResp struct {
 	Result struct {
-		IsTruncated bool `xml:"IsTruncated"`
+		IsTruncated bool   `xml:"IsTruncated"`
 		Marker      string `xml:"Marker"`
 		Users       struct {
 			Members []iamUserXML `xml:"member"`
@@ -106,7 +114,7 @@ type listUsersResp struct {
 // listGroupsResp maps the XML response from ListGroups and ListGroupsForUser.
 type listGroupsResp struct {
 	Result struct {
-		IsTruncated bool `xml:"IsTruncated"`
+		IsTruncated bool   `xml:"IsTruncated"`
 		Marker      string `xml:"Marker"`
 		Groups      struct {
 			Members []iamGroupXML `xml:"member"`
@@ -117,7 +125,7 @@ type listGroupsResp struct {
 // listGroupsForUserResp has a different wrapper element name.
 type listGroupsForUserResp struct {
 	Result struct {
-		IsTruncated bool `xml:"IsTruncated"`
+		IsTruncated bool   `xml:"IsTruncated"`
 		Marker      string `xml:"Marker"`
 		Groups      struct {
 			Members []iamGroupXML `xml:"member"`
@@ -127,51 +135,86 @@ type listGroupsForUserResp struct {
 
 type listRolesResp struct {
 	Result struct {
-		IsTruncated bool `xml:"IsTruncated"`
+		IsTruncated bool   `xml:"IsTruncated"`
 		Marker      string `xml:"Marker"`
 		Roles       struct {
-			Members []struct {
-				RoleID      string `xml:"RoleId"`
-				RoleName    string `xml:"RoleName"`
-				Description string `xml:"Description"`
-			} `xml:"member"`
+			Members []iamRoleXML `xml:"member"`
 		} `xml:"Roles"`
 	} `xml:"ListRolesResult"`
 }
 
+type iamRoleXML struct {
+	RoleID      string `xml:"RoleId"`
+	RoleName    string `xml:"RoleName"`
+	Description string `xml:"Description"`
+}
+
 type listPoliciesResp struct {
 	Result struct {
-		IsTruncated bool `xml:"IsTruncated"`
+		IsTruncated bool   `xml:"IsTruncated"`
 		Marker      string `xml:"Marker"`
 		Policies    struct {
-			Members []struct {
-				PolicyName  string `xml:"PolicyName"`
-				PolicyID    string `xml:"PolicyId"`
-				Description string `xml:"Description"`
-			} `xml:"member"`
+			Members []iamPolicyXML `xml:"member"`
 		} `xml:"Policies"`
 	} `xml:"ListPoliciesResult"`
 }
 
+type iamPolicyXML struct {
+	PolicyName  string `xml:"PolicyName"`
+	PolicyID    string `xml:"PolicyId"`
+	Description string `xml:"Description"`
+}
+
 type listAccessKeysResp struct {
 	Result struct {
-		AccessKeyMetadata struct {
-			Members []struct {
-				AccessKeyID string `xml:"AccessKeyId"`
-				Status      string `xml:"Status"`
-			} `xml:"member"`
-		} `xml:"AccessKeyMetadata"`
+		AccessKeyMetadata iamAccessKeyMetadata `xml:"AccessKeyMetadata"`
 	} `xml:"ListAccessKeysResult"`
+}
+
+type iamAccessKeyMetadata struct {
+	Members []iamAccessKeyXML `xml:"member"`
+}
+
+type iamAccessKeyXML struct {
+	AccessKeyID string `xml:"AccessKeyId"`
+	Status      string `xml:"Status"`
 }
 
 type listMFADevicesResp struct {
 	Result struct {
-		MFADevices struct {
-			Members []struct {
-				SerialNumber string `xml:"SerialNumber"`
-			} `xml:"member"`
-		} `xml:"MFADevices"`
+		MFADevices iamMFADevices `xml:"MFADevices"`
 	} `xml:"ListMFADevicesResult"`
+}
+
+type iamMFADevices struct {
+	Members []iamMFADeviceXML `xml:"member"`
+}
+
+type iamMFADeviceXML struct {
+	SerialNumber string `xml:"SerialNumber"`
+}
+
+type listVirtualMFADevicesResp struct {
+	Result struct {
+		IsTruncated       bool                 `xml:"IsTruncated"`
+		Marker            string               `xml:"Marker"`
+		VirtualMFADevices iamVirtualMFADevices `xml:"VirtualMFADevices"`
+	} `xml:"ListVirtualMFADevicesResult"`
+}
+
+type iamVirtualMFADevices struct {
+	Members []iamVirtualMFADeviceXML `xml:"member"`
+}
+
+type iamVirtualMFADeviceXML struct {
+	SerialNumber string            `xml:"SerialNumber"`
+	EnableDate   string            `xml:"EnableDate"`
+	User         iamVirtualMFAUser `xml:"User"`
+}
+
+type iamVirtualMFAUser struct {
+	UserID   string `xml:"UserId"`
+	UserName string `xml:"UserName"`
 }
 
 // iamErrorResp maps the XML error body returned when IAM returns a non-200 status.
@@ -468,6 +511,46 @@ func (c *Client) RemoveUserFromGroup(ctx context.Context, userName, groupName st
 		return fmt.Errorf("remove user %q from group %q: %w", userName, groupName, err)
 	}
 	return nil
+}
+
+// ListVirtualMFADevices returns one page of assigned virtual MFA devices.
+func (c *Client) ListVirtualMFADevices(
+	ctx context.Context,
+	marker string,
+) ([]IAMVirtualMFADevice, bool, string, error) {
+	params := map[string]string{
+		"Action":           "ListVirtualMFADevices",
+		"AssignmentStatus": "Assigned",
+	}
+	if marker != "" {
+		params["Marker"] = marker
+	}
+
+	data, err := c.iamPost(ctx, params)
+	if err != nil {
+		return nil, false, "", fmt.Errorf("list virtual MFA devices: %w", err)
+	}
+
+	var resp listVirtualMFADevicesResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, false, "", fmt.Errorf("parse list virtual MFA devices response: %w", err)
+	}
+
+	devices := make([]IAMVirtualMFADevice, len(resp.Result.VirtualMFADevices.Members))
+	for index, member := range resp.Result.VirtualMFADevices.Members {
+		var enableDate time.Time
+		if member.EnableDate != "" {
+			enableDate, _ = time.Parse(time.RFC3339, member.EnableDate)
+		}
+		devices[index] = IAMVirtualMFADevice{
+			SerialNumber: member.SerialNumber,
+			EnableDate:   enableDate,
+			UserID:       member.User.UserID,
+			UserName:     member.User.UserName,
+		}
+	}
+
+	return devices, resp.Result.IsTruncated, resp.Result.Marker, nil
 }
 
 // asIAMError checks whether err (or its cause) is an *IAMError and writes it to target.

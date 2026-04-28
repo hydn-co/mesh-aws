@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/credentials"
+	"github.com/hydn-co/mesh-aws/internal/helpers"
 	"github.com/hydn-co/mesh-aws/internal/options"
-	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
@@ -36,37 +37,82 @@ type cloudTrailUserIdentity struct {
 
 // CloudTrailActivityCollector collects ConsoleLogin events from CloudTrail.
 type CloudTrailActivityCollector struct {
-	ctx *connector.TypedFeatureContext[*options.ActivityOptions, *payloads.ActivityResumePayload]
+	*connector.TypedFeatureContext[*options.ActivityOptions, *connector.NoPayload]
+	client      *api.Client
+	initialized bool
 }
 
 // NewCloudTrailActivityCollector constructs the collector with the given feature context.
-func NewCloudTrailActivityCollector(ctx *connector.TypedFeatureContext[*options.ActivityOptions, *payloads.ActivityResumePayload]) runner.Feature {
-	return &CloudTrailActivityCollector{ctx: ctx}
+func NewCloudTrailActivityCollector(
+	ctx *connector.TypedFeatureContext[*options.ActivityOptions, *connector.NoPayload],
+) runner.Feature {
+	return &CloudTrailActivityCollector{TypedFeatureContext: ctx}
 }
 
-func (c *CloudTrailActivityCollector) Init(_ context.Context) error { return nil }
-func (c *CloudTrailActivityCollector) Stop(_ context.Context) error { return nil }
-
-func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
-	const name = "cloudtrail-activity-collector"
-	logCollectStart(name)
-
-	creds, err := credentials.Parse(c.ctx.GetCredentials())
+func (c *CloudTrailActivityCollector) Init(ctx context.Context) error {
+	creds, err := credentials.Parse(c.GetCredentials())
 	if err != nil {
-		logCollectError(name, err)
 		return fmt.Errorf("parse credentials: %w", err)
 	}
 
-	client, err := api.New(creds)
+	client, err := api.NewClient(creds)
 	if err != nil {
-		logCollectError(name, err)
 		return fmt.Errorf("create AWS client: %w", err)
 	}
 
-	// Support resume from last event time.
-	var startTime *time.Time
-	if payload := c.ctx.GetPayload(); payload != nil && payload.LastEventTime != nil {
-		startTime = payload.LastEventTime
+	c.client = client
+	c.initialized = true
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized CloudTrail activity collector")
+	return nil
+}
+
+func (c *CloudTrailActivityCollector) Stop(ctx context.Context) error {
+	if err := helpers.CheckInitialized(c.initialized); err != nil {
+		return err
+	}
+
+	c.client = nil
+	c.initialized = false
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped CloudTrail activity collector")
+	return nil
+}
+
+func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
+	if err := helpers.CheckInitialized(c.initialized); err != nil {
+		return err
+	}
+
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting CloudTrail activity collection")
+
+	var (
+		startTime    *time.Time
+		lastEventRef string
+	)
+	if c.Payload != nil && c.Payload.Content != nil {
+		switch event := c.Payload.Content.(type) {
+		case *events.LoginSucceeded:
+			timestamp := event.Timestamp.UTC()
+			startTime = &timestamp
+			lastEventRef = event.EventRef
+		case *events.LoginFailed:
+			timestamp := event.Timestamp.UTC()
+			startTime = &timestamp
+			lastEventRef = event.EventRef
+		case *events.SessionCreated:
+			timestamp := event.Timestamp.UTC()
+			startTime = &timestamp
+			lastEventRef = event.EventRef
+		case *events.SessionTerminated:
+			timestamp := event.Timestamp.UTC()
+			startTime = &timestamp
+			lastEventRef = event.EventRef
+		}
+	}
+	if startTime != nil {
+		logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "resuming CloudTrail activity collection",
+			"timestamp", startTime.Format(time.RFC3339),
+			"event_ref", lastEventRef,
+		)
 	}
 
 	count := 0
@@ -76,20 +122,40 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 			return err
 		}
 
-		evts, token, err := client.LookupEvents(ctx, "ConsoleLogin", startTime, nextToken)
+		evts, token, err := c.client.LookupEvents(ctx, "ConsoleLogin", startTime, nextToken)
 		if err != nil {
-			logCollectError(name, err)
+			logCollector(
+				ctx,
+				c.TypedFeatureContext,
+				slog.LevelError,
+				"failed to look up CloudTrail events",
+				"error",
+				err,
+			)
 			return fmt.Errorf("lookup CloudTrail events: %w", err)
 		}
 
 		for _, e := range evts {
+			if lastEventRef != "" && e.EventID == lastEventRef {
+				continue
+			}
+
 			if e.CloudTrailEvent == "" {
 				continue
 			}
 
 			var detail cloudTrailEventDetail
 			if err := json.Unmarshal([]byte(e.CloudTrailEvent), &detail); err != nil {
-				logCollectError(name, fmt.Errorf("parse CloudTrail event JSON: %w", err))
+				logCollector(
+					ctx,
+					c.TypedFeatureContext,
+					slog.LevelError,
+					"failed to parse CloudTrail event JSON",
+					"event_id",
+					e.EventID,
+					"error",
+					err,
+				)
 				continue
 			}
 
@@ -129,8 +195,17 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 					},
 					LoginType: "console",
 				}
-				if err := c.ctx.Emit(ctx, ev); err != nil {
-					logCollectError(name, err)
+				if err := c.Emit(ctx, ev); err != nil {
+					logCollector(
+						ctx,
+						c.TypedFeatureContext,
+						slog.LevelError,
+						"failed to emit LoginSucceeded event",
+						"event_ref",
+						eventRef,
+						"error",
+						err,
+					)
 					return fmt.Errorf("emit LoginSucceeded: %w", err)
 				}
 			} else {
@@ -151,8 +226,17 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 					},
 					LoginType: "console",
 				}
-				if err := c.ctx.Emit(ctx, ev); err != nil {
-					logCollectError(name, err)
+				if err := c.Emit(ctx, ev); err != nil {
+					logCollector(
+						ctx,
+						c.TypedFeatureContext,
+						slog.LevelError,
+						"failed to emit LoginFailed event",
+						"event_ref",
+						eventRef,
+						"error",
+						err,
+					)
 					return fmt.Errorf("emit LoginFailed: %w", err)
 				}
 			}
@@ -165,6 +249,6 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 		nextToken = token
 	}
 
-	logCollectDone(name, count)
+	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished CloudTrail activity collection", "count", count)
 	return nil
 }

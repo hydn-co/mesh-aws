@@ -6,100 +6,159 @@ import (
 
 	"github.com/fgrzl/json/polymorphic"
 	"github.com/hydn-co/mesh-aws/internal/options"
-	_ "github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestUsersOptions_Discriminator(t *testing.T) {
-	o := &options.UsersOptions{}
-	assert.Equal(t, "mesh://aws/options/users", o.GetDiscriminator())
+func TestShouldReturnUsersDiscriminatorWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.UsersOptions{}
+
+	// Act.
+	discriminator := option.GetDiscriminator()
+
+	// Assert.
+	assert.Equal(t, "mesh://aws/options/users", discriminator)
 }
 
-func TestUsersOptions_GetSpaces(t *testing.T) {
-	o := &options.UsersOptions{}
-	sp := o.GetSpaces()
-	assert.Contains(t, sp, spaces.Accounts)
+func TestShouldReturnUsersSpacesWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.UsersOptions{}
+
+	// Act.
+	optionSpaces := option.GetSpaces()
+
+	// Assert.
+	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.GroupMembers}, optionSpaces)
 }
 
-func TestUsersOptions_GetRequirements(t *testing.T) {
-	o := &options.UsersOptions{}
-	assert.Equal(t, []string{"iam"}, o.GetRequirements())
+func TestShouldReturnUsersRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.UsersOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "iam"}, requirements)
 }
 
-func TestGroupsOptions_Discriminator(t *testing.T) {
-	o := &options.GroupsOptions{}
-	assert.Equal(t, "mesh://aws/options/groups", o.GetDiscriminator())
+func TestShouldReturnActivitySpacesWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.ActivityOptions{}
+
+	// Act.
+	optionSpaces := option.GetSpaces()
+
+	// Assert.
+	assert.Equal(t, []spaces.Space{spaces.Activity}, optionSpaces)
 }
 
-func TestRolesOptions_Discriminator(t *testing.T) {
-	o := &options.RolesOptions{}
-	assert.Equal(t, "mesh://aws/options/roles", o.GetDiscriminator())
+func TestShouldReturnActivityRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.ActivityOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "cloudtrail"}, requirements)
 }
 
-func TestPoliciesOptions_Discriminator(t *testing.T) {
-	o := &options.PoliciesOptions{}
-	assert.Equal(t, "mesh://aws/options/policies", o.GetDiscriminator())
+func TestShouldReturnIdentityStoreUsersRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.IdentityStoreUsersOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "identitystore"}, requirements)
 }
 
-func TestActivityOptions_Discriminator(t *testing.T) {
-	o := &options.ActivityOptions{}
-	assert.Equal(t, "mesh://aws/options/activity", o.GetDiscriminator())
+func TestShouldReturnIdentityStoreGroupsRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.IdentityStoreGroupsOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "identitystore"}, requirements)
 }
 
-func TestActivityOptions_GetSpaces(t *testing.T) {
-	o := &options.ActivityOptions{}
-	assert.Equal(t, []spaces.Space{spaces.Activity}, o.GetSpaces())
+func TestShouldReturnMasterAccountRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.MasterAccountOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "organizations"}, requirements)
 }
 
-func TestActivityOptions_GetRequirements(t *testing.T) {
-	o := &options.ActivityOptions{}
-	assert.Equal(t, []string{"cloudtrail"}, o.GetRequirements())
+func TestShouldReturnSSOActivityRequirementsWhenRequested(t *testing.T) {
+	// Arrange.
+	option := &options.SSOActivityOptions{}
+
+	// Act.
+	requirements := option.GetRequirements()
+
+	// Assert.
+	assert.Equal(t, []string{"aws", "cloudtrail", "identitycenter"}, requirements)
 }
 
-func TestUsersOptions_PolymorphicRoundTrip(t *testing.T) {
+func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
+	// Arrange.
+	registeredOptions := map[string]any{
+		"mesh://aws/options/users":                 &options.UsersOptions{},
+		"mesh://aws/options/groups":                &options.GroupsOptions{},
+		"mesh://aws/options/roles":                 &options.RolesOptions{},
+		"mesh://aws/options/policies":              &options.PoliciesOptions{},
+		"mesh://aws/options/activity":              &options.ActivityOptions{},
+		"mesh://aws/options/virtual-mfa-devices":   &options.VirtualMFADevicesOptions{},
+		"mesh://aws/options/identity-store-users":  &options.IdentityStoreUsersOptions{},
+		"mesh://aws/options/identity-store-groups": &options.IdentityStoreGroupsOptions{},
+		"mesh://aws/options/master-account":        &options.MasterAccountOptions{},
+		"mesh://aws/options/sso-activity":          &options.SSOActivityOptions{},
+	}
+
+	// Act.
+	for discriminator, expectedType := range registeredOptions {
+		created, err := polymorphic.CreateInstance(discriminator)
+
+		// Assert.
+		require.NoError(t, err)
+		require.NotNil(t, created)
+		assert.IsType(t, expectedType, created)
+	}
+
+	// Assert.
+	assert.Len(t, registeredOptions, 10)
+	assert.Equal(t, "mesh://aws/options/users", (&options.UsersOptions{}).GetDiscriminator())
+}
+
+func TestShouldRoundTripUsersOptionsWhenEncodedPolymorphically(t *testing.T) {
+	// Arrange.
 	original := &options.UsersOptions{}
-	env := polymorphic.NewEnvelope(original)
+	envelope := polymorphic.NewEnvelope(original)
 
-	data, err := json.Marshal(env)
+	// Act.
+	data, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
 	var restored polymorphic.Envelope
 	err = json.Unmarshal(data, &restored)
+
+	// Assert.
 	require.NoError(t, err)
+	restoredOption, ok := restored.Content.(*options.UsersOptions)
+	require.True(t, ok)
+	assert.Equal(t, original.GetDiscriminator(), restoredOption.GetDiscriminator())
+	assert.Equal(t, original.GetSpaces(), restoredOption.GetSpaces())
+	assert.Equal(t, original.GetRequirements(), restoredOption.GetRequirements())
 
-	restoredOpts, ok := restored.Content.(*options.UsersOptions)
-	require.True(t, ok, "expected *options.UsersOptions, got %T", restored.Content)
-	assert.Equal(t, original.GetDiscriminator(), restoredOpts.GetDiscriminator())
-}
-
-func TestGroupsOptions_PolymorphicRoundTrip(t *testing.T) {
-	original := &options.GroupsOptions{}
-	env := polymorphic.NewEnvelope(original)
-
-	data, err := json.Marshal(env)
-	require.NoError(t, err)
-
-	var restored polymorphic.Envelope
-	err = json.Unmarshal(data, &restored)
-	require.NoError(t, err)
-
-	_, ok := restored.Content.(*options.GroupsOptions)
-	require.True(t, ok, "expected *options.GroupsOptions, got %T", restored.Content)
-}
-
-func TestActivityOptions_PolymorphicRoundTrip(t *testing.T) {
-	original := &options.ActivityOptions{}
-	env := polymorphic.NewEnvelope(original)
-
-	data, err := json.Marshal(env)
-	require.NoError(t, err)
-
-	var restored polymorphic.Envelope
-	err = json.Unmarshal(data, &restored)
-	require.NoError(t, err)
-
-	_, ok := restored.Content.(*options.ActivityOptions)
-	require.True(t, ok, "expected *options.ActivityOptions, got %T", restored.Content)
+	// Assert.
 }

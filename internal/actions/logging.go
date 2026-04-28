@@ -1,17 +1,37 @@
 package actions
 
 import (
+	"context"
 	"log/slog"
+
+	"github.com/hydn-co/mesh-sdk/pkg/connector"
 )
 
-func logActionStart(name string) {
-	slog.Info("action started", slog.String("action", name))
-}
+func logAction[T connector.FeatureOptions, P connector.FeaturePayload](
+	ctx context.Context,
+	action *connector.TypedFeatureContext[T, P],
+	level slog.Level,
+	msg string,
+	args ...any,
+) {
+	logArgs := make([]any, 0, len(args)+6)
+	if action != nil {
+		logArgs = append(logArgs,
+			"tenant_id", action.GetTenantID(),
+			"connector_id", action.GetSegmentID(),
+			"feature_name", action.GetName(),
+		)
+	}
+	logArgs = append(logArgs, args...)
 
-func logActionDone(name string) {
-	slog.Info("action completed", slog.String("action", name))
-}
-
-func logActionError(name string, err error) {
-	slog.Error("action error", slog.String("action", name), slog.String("err", err.Error()))
+	switch {
+	case level <= slog.LevelDebug:
+		slog.DebugContext(ctx, msg, logArgs...)
+	case level < slog.LevelWarn:
+		slog.InfoContext(ctx, msg, logArgs...)
+	case level < slog.LevelError:
+		slog.WarnContext(ctx, msg, logArgs...)
+	default:
+		slog.ErrorContext(ctx, msg, logArgs...)
+	}
 }

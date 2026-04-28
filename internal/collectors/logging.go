@@ -1,17 +1,37 @@
 package collectors
 
 import (
+	"context"
 	"log/slog"
+
+	"github.com/hydn-co/mesh-sdk/pkg/connector"
 )
 
-func logCollectStart(name string) {
-	slog.Info("collector started", slog.String("collector", name))
-}
+func logCollector[T connector.FeatureOptions, P connector.FeaturePayload](
+	ctx context.Context,
+	collector *connector.TypedFeatureContext[T, P],
+	level slog.Level,
+	msg string,
+	args ...any,
+) {
+	logArgs := make([]any, 0, len(args)+6)
+	if collector != nil {
+		logArgs = append(logArgs,
+			"tenant_id", collector.GetTenantID(),
+			"connector_id", collector.GetSegmentID(),
+			"feature_name", collector.GetName(),
+		)
+	}
+	logArgs = append(logArgs, args...)
 
-func logCollectDone(name string, count int) {
-	slog.Info("collector finished", slog.String("collector", name), slog.Int("count", count))
-}
-
-func logCollectError(name string, err error) {
-	slog.Error("collector error", slog.String("collector", name), slog.String("err", err.Error()))
+	switch {
+	case level <= slog.LevelDebug:
+		slog.DebugContext(ctx, msg, logArgs...)
+	case level < slog.LevelWarn:
+		slog.InfoContext(ctx, msg, logArgs...)
+	case level < slog.LevelError:
+		slog.WarnContext(ctx, msg, logArgs...)
+	default:
+		slog.ErrorContext(ctx, msg, logArgs...)
+	}
 }
