@@ -78,7 +78,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 			multiFactor.MultiFactorRef = device.SerialNumber
 			multiFactor.Status = types.MultiFactorStatusEnabled
 			multiFactor.Kind = types.MultiFactorKindAuthenticator
-			multiFactor.CreatedAt = device.EnableDate
+			multiFactor.CreatedAt = &device.EnableDate
 
 			if err := c.Emit(ctx, multiFactor); err != nil {
 				logCollector(
@@ -98,7 +98,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 				accountMFA := entities.NewAccountMultiFactor()
 				accountMFA.AccountRef = device.UserID
 				accountMFA.MultiFactorRef = device.SerialNumber
-				accountMFA.CreatedAt = device.EnableDate
+				accountMFA.CreatedAt = &device.EnableDate
 
 				if err := c.Emit(ctx, accountMFA); err != nil {
 					logCollector(

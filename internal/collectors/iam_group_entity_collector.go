@@ -80,7 +80,7 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 			group := entities.NewGroup()
 			group.GroupRef = g.GroupID
 			group.Name = g.GroupName
-			group.CreatedAt = g.CreateDate
+			group.CreatedAt = &g.CreateDate
 
 			if err := c.Emit(ctx, group); err != nil {
 				logCollector(
