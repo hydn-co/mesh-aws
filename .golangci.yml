@@ -1,0 +1,12 @@
+version: "2"
+
+formatters:
+  enable:
+    - goimports
+    - golines
+  settings:
+    golines:
+      max-len: 120
+linters:
+  enable:
+    - staticcheck

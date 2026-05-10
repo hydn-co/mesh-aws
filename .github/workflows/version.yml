@@ -1,0 +1,34 @@
+name: Version
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    outputs:
+      version:
+        description: "Calculated semantic version (SemVer string)"
+        value: ${{ jobs.version.outputs.version }}
+      semver:
+        description: "Same as version (GitVersion SemVer)"
+        value: ${{ jobs.version.outputs.semver }}
+      majorMinorPatch:
+        description: "Major.Minor.Patch"
+        value: ${{ jobs.version.outputs.majorMinorPatch }}
+      sha:
+        description: "Commit SHA GitVersion resolved against"
+        value: ${{ jobs.version.outputs.sha }}
+      fullSemVer:
+        description: "Full SemVer including pre-release and metadata"
+        value: ${{ jobs.version.outputs.fullSemVer }}
+      informationalVersion:
+        description: "Informational version string"
+        value: ${{ jobs.version.outputs.informationalVersion }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Version
+    uses: hydn-co/build-tools/.github/workflows/version.yml@main
+    permissions:
+      contents: read

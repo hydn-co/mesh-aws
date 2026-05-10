@@ -1,0 +1,16 @@
+mode: Mainline
+branches:
+  main:
+    regex: ^main$
+    tag: ''
+    increment: Patch
+    prevent-increment-of-merged-branch-version: true
+  feature:
+    regex: ^feature[/-]
+    tag: alpha
+    increment: Minor
+  pull-request:
+    regex: ^(pull|pull\-requests|pr)[/-]
+    tag: PullRequest
+    tag-number-pattern: '[/-](?<number>\d+)[-/]'
+    increment: Inherit
