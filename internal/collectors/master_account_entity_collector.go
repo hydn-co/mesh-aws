@@ -12,6 +12,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -42,7 +43,7 @@ func (c *MasterAccountEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized master account collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized master account collector")
 	return nil
 }
 
@@ -51,11 +52,18 @@ func (c *MasterAccountEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting master account collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting master account collection")
 
 	organization, err := c.client.DescribeOrganization(ctx)
 	if err != nil {
-		logCollector(ctx, c.TypedFeatureContext, slog.LevelError, "failed to describe AWS organization", "error", err)
+		connectorutil.LogFeature(
+			ctx,
+			c.TypedFeatureContext,
+			slog.LevelError,
+			"failed to describe AWS organization",
+			"error",
+			err,
+		)
 		return fmt.Errorf("describe organization: %w", err)
 	}
 
@@ -71,7 +79,7 @@ func (c *MasterAccountEntityCollector) Start(ctx context.Context) error {
 	}
 
 	if err := c.Emit(ctx, account); err != nil {
-		logCollector(
+		connectorutil.LogFeature(
 			ctx,
 			c.TypedFeatureContext,
 			slog.LevelError,
@@ -84,7 +92,14 @@ func (c *MasterAccountEntityCollector) Start(ctx context.Context) error {
 		return fmt.Errorf("emit master account: %w", err)
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished master account collection", "count", 1)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished master account collection",
+		"count",
+		1,
+	)
 	return nil
 }
 
@@ -95,6 +110,6 @@ func (c *MasterAccountEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped master account collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped master account collector")
 	return nil
 }

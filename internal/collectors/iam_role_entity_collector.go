@@ -11,6 +11,7 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -41,7 +42,7 @@ func (c *IAMRoleEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM role collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM role collector")
 	return nil
 }
 
@@ -52,7 +53,7 @@ func (c *IAMRoleEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM role collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM role collector")
 	return nil
 }
 
@@ -61,7 +62,7 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM role collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM role collection")
 
 	count := 0
 	var marker string
@@ -72,7 +73,14 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 
 		roles, truncated, nextMarker, err := c.client.ListRoles(ctx, "", marker)
 		if err != nil {
-			logCollector(ctx, c.TypedFeatureContext, slog.LevelError, "failed to list IAM roles", "error", err)
+			connectorutil.LogFeature(
+				ctx,
+				c.TypedFeatureContext,
+				slog.LevelError,
+				"failed to list IAM roles",
+				"error",
+				err,
+			)
 			return fmt.Errorf("list IAM roles: %w", err)
 		}
 
@@ -83,7 +91,7 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 			role.Description = r.Description
 
 			if err := c.Emit(ctx, role); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -104,6 +112,6 @@ func (c *IAMRoleEntityCollector) Start(ctx context.Context) error {
 		marker = nextMarker
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished IAM role collection", "count", count)
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished IAM role collection", "count", count)
 	return nil
 }

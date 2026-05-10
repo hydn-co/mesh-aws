@@ -359,11 +359,7 @@ func (c *Client) ListRoles(ctx context.Context, pathPrefix, marker string) ([]IA
 
 	roles := make([]IAMRole, len(resp.Result.Roles.Members))
 	for i, m := range resp.Result.Roles.Members {
-		roles[i] = IAMRole{
-			RoleID:      m.RoleID,
-			RoleName:    m.RoleName,
-			Description: m.Description,
-		}
+		roles[i] = IAMRole(m)
 	}
 	return roles, resp.Result.IsTruncated, resp.Result.Marker, nil
 }
@@ -390,11 +386,7 @@ func (c *Client) ListPolicies(ctx context.Context, scope, marker string) ([]IAMP
 
 	policies := make([]IAMPolicy, len(resp.Result.Policies.Members))
 	for i, m := range resp.Result.Policies.Members {
-		policies[i] = IAMPolicy{
-			PolicyName:  m.PolicyName,
-			PolicyID:    m.PolicyID,
-			Description: m.Description,
-		}
+		policies[i] = IAMPolicy(m)
 	}
 	return policies, resp.Result.IsTruncated, resp.Result.Marker, nil
 }
@@ -416,7 +408,7 @@ func (c *Client) ListAccessKeys(ctx context.Context, userName string) ([]IAMAcce
 
 	keys := make([]IAMAccessKey, len(resp.Result.AccessKeyMetadata.Members))
 	for i, m := range resp.Result.AccessKeyMetadata.Members {
-		keys[i] = IAMAccessKey{AccessKeyID: m.AccessKeyID, Status: m.Status}
+		keys[i] = IAMAccessKey(m)
 	}
 	return keys, nil
 }
@@ -469,7 +461,7 @@ func (c *Client) ListMFADevices(ctx context.Context, userName string) ([]IAMMFAD
 
 	devices := make([]IAMMFADevice, len(resp.Result.MFADevices.Members))
 	for i, m := range resp.Result.MFADevices.Members {
-		devices[i] = IAMMFADevice{SerialNumber: m.SerialNumber}
+		devices[i] = IAMMFADevice(m)
 	}
 	return devices, nil
 }

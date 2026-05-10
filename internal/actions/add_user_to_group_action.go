@@ -11,6 +11,7 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -46,7 +47,7 @@ func (a *AddUserToGroupAction) Init(ctx context.Context) error {
 
 	a.client = client
 	a.initialized = true
-	logAction(ctx, a.TypedFeatureContext, slog.LevelInfo, "initialized add-user-to-group action")
+	connectorutil.LogFeature(ctx, a.TypedFeatureContext, slog.LevelInfo, "initialized add-user-to-group action")
 	return nil
 }
 
@@ -57,7 +58,7 @@ func (a *AddUserToGroupAction) Stop(ctx context.Context) error {
 
 	a.client = nil
 	a.initialized = false
-	logAction(ctx, a.TypedFeatureContext, slog.LevelInfo, "stopped add-user-to-group action")
+	connectorutil.LogFeature(ctx, a.TypedFeatureContext, slog.LevelInfo, "stopped add-user-to-group action")
 	return nil
 }
 
@@ -67,17 +68,24 @@ func (a *AddUserToGroupAction) Start(ctx context.Context) error {
 	}
 
 	payload := a.GetPayload()
-	logAction(ctx, a.TypedFeatureContext, slog.LevelInfo, "starting add-user-to-group action",
+	connectorutil.LogFeature(ctx, a.TypedFeatureContext, slog.LevelInfo, "starting add-user-to-group action",
 		"user_name", payload.UserName,
 		"group_name", payload.GroupName,
 	)
 
 	if err := a.client.AddUserToGroup(ctx, payload.UserName, payload.GroupName); err != nil {
-		logAction(ctx, a.TypedFeatureContext, slog.LevelError, "failed to add user to group", "error", err)
+		connectorutil.LogFeature(
+			ctx,
+			a.TypedFeatureContext,
+			slog.LevelError,
+			"failed to add user to group",
+			"error",
+			err,
+		)
 		return fmt.Errorf("add user %q to group %q: %w", payload.UserName, payload.GroupName, err)
 	}
 
-	logAction(ctx, a.TypedFeatureContext, slog.LevelInfo, "completed add-user-to-group action",
+	connectorutil.LogFeature(ctx, a.TypedFeatureContext, slog.LevelInfo, "completed add-user-to-group action",
 		"user_name", payload.UserName,
 		"group_name", payload.GroupName,
 	)

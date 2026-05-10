@@ -17,163 +17,146 @@ func main() {
 		"Collects IAM users, groups, roles, policies and CloudTrail activity from AWS.",
 	)
 
-	mustRegister(manifest, "collect-users", "Collect IAM Users",
+	manifest.MustRegisterFeature("collect-users", "Collect IAM Users",
 		"Lists all IAM users and emits Account entities.",
-		true, runner.FeatureTypeCollector,
-		&options.UsersOptions{}, nil,
+		runner.FeatureSchedulable, runner.FeatureTypeCollector,
+		&options.UsersOptions{}, (*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(collectors.NewIAMUserEntityCollector),
 	)
 
-	mustRegister(manifest, "collect-groups", "Collect IAM Groups",
+	manifest.MustRegisterFeature("collect-groups", "Collect IAM Groups",
 		"Lists all IAM groups and emits Group entities.",
-		true, runner.FeatureTypeCollector,
-		&options.GroupsOptions{}, nil,
+		runner.FeatureSchedulable, runner.FeatureTypeCollector,
+		&options.GroupsOptions{}, (*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(collectors.NewIAMGroupEntityCollector),
 	)
 
-	mustRegister(manifest, "collect-roles", "Collect IAM Roles",
+	manifest.MustRegisterFeature("collect-roles", "Collect IAM Roles",
 		"Lists all IAM roles and emits Role entities.",
-		true, runner.FeatureTypeCollector,
-		&options.RolesOptions{}, nil,
+		runner.FeatureSchedulable, runner.FeatureTypeCollector,
+		&options.RolesOptions{}, (*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(collectors.NewIAMRoleEntityCollector),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-policies",
 		"Collect IAM Policies",
 		"Lists all customer-managed IAM policies and emits Policy entities.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.PoliciesOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewIAMPolicyEntityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-virtual-mfa-devices",
 		"Collect IAM Virtual MFA Devices",
 		"Lists IAM virtual MFA devices and emits multi-factor entities and account bindings.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.VirtualMFADevicesOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewIAMVirtualMFADeviceEntityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-identity-store-users",
 		"Collect Identity Store Users",
 		"Lists AWS Identity Store users and emits account entities.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.IdentityStoreUsersOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewIdentityStoreUserEntityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-identity-store-groups",
 		"Collect Identity Store Groups",
 		"Lists AWS Identity Store groups and emits group entities.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.IdentityStoreGroupsOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewIdentityStoreGroupEntityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-master-account",
 		"Collect Organization Master Account",
 		"Describes the AWS organization and emits the management account as an account entity.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.MasterAccountOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewMasterAccountEntityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-activity",
 		"Collect CloudTrail Activity",
 		"Collects ConsoleLogin events from CloudTrail and emits login activity events.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.ActivityOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewCloudTrailActivityCollector,
 		),
 	)
 
-	mustRegister(
-		manifest,
+	manifest.MustRegisterFeature(
 		"collect-sso-activity",
 		"Collect AWS SSO Activity",
 		"Collects AWS SSO login activity from CloudTrail and emits login activity events.",
-		true,
+		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		&options.SSOActivityOptions{},
-		nil,
+		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(
 			collectors.NewSSOLoginActivityCollector,
 		),
 	)
 
-	mustRegister(manifest, "add-user-to-group", "Add User to Group",
+	manifest.MustRegisterFeature("add-user-to-group", "Add User to Group",
 		"Adds an IAM user to an IAM group.",
-		false, runner.FeatureTypeAction,
+		runner.FeatureUnschedulable, runner.FeatureTypeAction,
 		&options.GroupsOptions{}, &payloads.AddUserToGroupPayload{},
 		runner.FeatureResumeBehaviorNone,
+		runner.AWSAccessKeyCredential,
 		runner.Factory(actions.NewAddUserToGroupAction),
 	)
 
 	runner.Run(manifest)
-}
-
-func mustRegister(
-	manifest *runner.Manifest,
-	name, displayName, description string,
-	schedulable bool,
-	featureType runner.FeatureType,
-	opts connector.FeatureOptions,
-	payload connector.FeaturePayload,
-	resumeBehavior runner.FeatureResumeBehavior,
-	factory func(options ...connector.FeatureContextOption) runner.Feature,
-) {
-	if err := manifest.RegisterFeature(
-		name, displayName, description,
-		schedulable, featureType,
-		opts, payload,
-		resumeBehavior, "AWS Access Key",
-		factory,
-	); err != nil {
-		panic("register feature " + name + ": " + err.Error())
-	}
 }

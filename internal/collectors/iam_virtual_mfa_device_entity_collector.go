@@ -12,6 +12,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -42,7 +43,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM virtual MFA device collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM virtual MFA device collector")
 	return nil
 }
 
@@ -51,7 +52,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM virtual MFA device collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM virtual MFA device collection")
 
 	count := 0
 	var marker string
@@ -62,7 +63,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 
 		devices, truncated, nextMarker, err := c.client.ListVirtualMFADevices(ctx, marker)
 		if err != nil {
-			logCollector(
+			connectorutil.LogFeature(
 				ctx,
 				c.TypedFeatureContext,
 				slog.LevelError,
@@ -81,7 +82,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 			multiFactor.CreatedAt = &device.EnableDate
 
 			if err := c.Emit(ctx, multiFactor); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -101,7 +102,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 				accountMFA.CreatedAt = &device.EnableDate
 
 				if err := c.Emit(ctx, accountMFA); err != nil {
-					logCollector(
+					connectorutil.LogFeature(
 						ctx,
 						c.TypedFeatureContext,
 						slog.LevelError,
@@ -125,7 +126,7 @@ func (c *IAMVirtualMFADeviceEntityCollector) Start(ctx context.Context) error {
 		marker = nextMarker
 	}
 
-	logCollector(
+	connectorutil.LogFeature(
 		ctx,
 		c.TypedFeatureContext,
 		slog.LevelInfo,
@@ -143,6 +144,6 @@ func (c *IAMVirtualMFADeviceEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM virtual MFA device collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM virtual MFA device collector")
 	return nil
 }

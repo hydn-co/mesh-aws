@@ -14,6 +14,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -62,7 +63,7 @@ func (c *CloudTrailActivityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized CloudTrail activity collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized CloudTrail activity collector")
 	return nil
 }
 
@@ -73,7 +74,7 @@ func (c *CloudTrailActivityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped CloudTrail activity collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped CloudTrail activity collector")
 	return nil
 }
 
@@ -82,7 +83,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting CloudTrail activity collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting CloudTrail activity collection")
 
 	var (
 		startTime    *time.Time
@@ -109,7 +110,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 		}
 	}
 	if startTime != nil {
-		logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "resuming CloudTrail activity collection",
+		connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "resuming CloudTrail activity collection",
 			"timestamp", startTime.Format(time.RFC3339),
 			"event_ref", lastEventRef,
 		)
@@ -124,7 +125,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 
 		evts, token, err := c.client.LookupEvents(ctx, "ConsoleLogin", startTime, nextToken)
 		if err != nil {
-			logCollector(
+			connectorutil.LogFeature(
 				ctx,
 				c.TypedFeatureContext,
 				slog.LevelError,
@@ -146,7 +147,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 
 			var detail cloudTrailEventDetail
 			if err := json.Unmarshal([]byte(e.CloudTrailEvent), &detail); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -196,7 +197,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 					LoginType: "console",
 				}
 				if err := c.Emit(ctx, ev); err != nil {
-					logCollector(
+					connectorutil.LogFeature(
 						ctx,
 						c.TypedFeatureContext,
 						slog.LevelError,
@@ -227,7 +228,7 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 					LoginType: "console",
 				}
 				if err := c.Emit(ctx, ev); err != nil {
-					logCollector(
+					connectorutil.LogFeature(
 						ctx,
 						c.TypedFeatureContext,
 						slog.LevelError,
@@ -249,6 +250,13 @@ func (c *CloudTrailActivityCollector) Start(ctx context.Context) error {
 		nextToken = token
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished CloudTrail activity collection", "count", count)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished CloudTrail activity collection",
+		"count",
+		count,
+	)
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -44,7 +45,7 @@ func (c *SSOLoginActivityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized SSO activity collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized SSO activity collector")
 	return nil
 }
 
@@ -53,7 +54,7 @@ func (c *SSOLoginActivityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting SSO activity collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting SSO activity collection")
 
 	var (
 		startTime    *time.Time
@@ -83,7 +84,14 @@ func (c *SSOLoginActivityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished SSO activity collection", "count", count)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished SSO activity collection",
+		"count",
+		count,
+	)
 	return nil
 }
 
@@ -98,7 +106,7 @@ func (c *SSOLoginActivityCollector) collectLookupEvents(
 	for {
 		evts, token, err := c.client.LookupEvents(ctx, eventName, startTime, nextToken)
 		if err != nil {
-			logCollector(
+			connectorutil.LogFeature(
 				ctx,
 				c.TypedFeatureContext,
 				slog.LevelError,
@@ -121,7 +129,7 @@ func (c *SSOLoginActivityCollector) collectLookupEvents(
 
 			var detail cloudTrailEventDetail
 			if err := json.Unmarshal([]byte(rawEvent.CloudTrailEvent), &detail); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -158,7 +166,7 @@ func (c *SSOLoginActivityCollector) collectLookupEvents(
 					LoginType: "sso",
 				}
 				if err := c.Emit(ctx, event); err != nil {
-					logCollector(
+					connectorutil.LogFeature(
 						ctx,
 						c.TypedFeatureContext,
 						slog.LevelError,
@@ -187,7 +195,7 @@ func (c *SSOLoginActivityCollector) collectLookupEvents(
 					LoginType:     "sso",
 				}
 				if err := c.Emit(ctx, event); err != nil {
-					logCollector(
+					connectorutil.LogFeature(
 						ctx,
 						c.TypedFeatureContext,
 						slog.LevelError,
@@ -219,6 +227,6 @@ func (c *SSOLoginActivityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped SSO activity collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped SSO activity collector")
 	return nil
 }

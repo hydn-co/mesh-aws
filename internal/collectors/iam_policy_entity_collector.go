@@ -12,6 +12,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -42,7 +43,7 @@ func (c *IAMPolicyEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM policy collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM policy collector")
 	return nil
 }
 
@@ -53,7 +54,7 @@ func (c *IAMPolicyEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM policy collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM policy collector")
 	return nil
 }
 
@@ -62,7 +63,7 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM policy collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM policy collection")
 
 	count := 0
 	var marker string
@@ -73,7 +74,14 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 
 		policies, truncated, nextMarker, err := c.client.ListPolicies(ctx, "Local", marker)
 		if err != nil {
-			logCollector(ctx, c.TypedFeatureContext, slog.LevelError, "failed to list IAM policies", "error", err)
+			connectorutil.LogFeature(
+				ctx,
+				c.TypedFeatureContext,
+				slog.LevelError,
+				"failed to list IAM policies",
+				"error",
+				err,
+			)
 			return fmt.Errorf("list IAM policies: %w", err)
 		}
 
@@ -86,7 +94,7 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 			policy.State = "enabled"
 
 			if err := c.Emit(ctx, policy); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -107,6 +115,13 @@ func (c *IAMPolicyEntityCollector) Start(ctx context.Context) error {
 		marker = nextMarker
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished IAM policy collection", "count", count)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished IAM policy collection",
+		"count",
+		count,
+	)
 	return nil
 }

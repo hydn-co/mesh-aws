@@ -11,6 +11,7 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -46,7 +47,7 @@ func (c *IdentityStoreGroupEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(
+	connectorutil.LogFeature(
 		ctx,
 		c.TypedFeatureContext,
 		slog.LevelInfo,
@@ -63,7 +64,7 @@ func (c *IdentityStoreGroupEntityCollector) Start(ctx context.Context) error {
 	}
 
 	options := c.GetOptions()
-	logCollector(
+	connectorutil.LogFeature(
 		ctx,
 		c.TypedFeatureContext,
 		slog.LevelInfo,
@@ -81,7 +82,7 @@ func (c *IdentityStoreGroupEntityCollector) Start(ctx context.Context) error {
 
 		groups, token, err := c.client.ListIdentityStoreGroups(ctx, options.IdentityStoreID, nextToken)
 		if err != nil {
-			logCollector(
+			connectorutil.LogFeature(
 				ctx,
 				c.TypedFeatureContext,
 				slog.LevelError,
@@ -99,7 +100,7 @@ func (c *IdentityStoreGroupEntityCollector) Start(ctx context.Context) error {
 			entity.Description = group.Description
 
 			if err := c.Emit(ctx, entity); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -120,7 +121,14 @@ func (c *IdentityStoreGroupEntityCollector) Start(ctx context.Context) error {
 		nextToken = token
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished Identity Store group collection", "count", count)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished Identity Store group collection",
+		"count",
+		count,
+	)
 	return nil
 }
 
@@ -131,6 +139,6 @@ func (c *IdentityStoreGroupEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped Identity Store group collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped Identity Store group collector")
 	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
@@ -41,7 +42,7 @@ func (c *IAMGroupEntityCollector) Init(ctx context.Context) error {
 
 	c.client = client
 	c.initialized = true
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM group collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "initialized IAM group collector")
 	return nil
 }
 
@@ -52,7 +53,7 @@ func (c *IAMGroupEntityCollector) Stop(ctx context.Context) error {
 
 	c.client = nil
 	c.initialized = false
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM group collector")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "stopped IAM group collector")
 	return nil
 }
 
@@ -61,7 +62,7 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM group collection")
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "starting IAM group collection")
 
 	count := 0
 	var marker string
@@ -72,7 +73,14 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 
 		groups, truncated, nextMarker, err := c.client.ListGroups(ctx, "", marker)
 		if err != nil {
-			logCollector(ctx, c.TypedFeatureContext, slog.LevelError, "failed to list IAM groups", "error", err)
+			connectorutil.LogFeature(
+				ctx,
+				c.TypedFeatureContext,
+				slog.LevelError,
+				"failed to list IAM groups",
+				"error",
+				err,
+			)
 			return fmt.Errorf("list IAM groups: %w", err)
 		}
 
@@ -83,7 +91,7 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 			group.CreatedAt = &g.CreateDate
 
 			if err := c.Emit(ctx, group); err != nil {
-				logCollector(
+				connectorutil.LogFeature(
 					ctx,
 					c.TypedFeatureContext,
 					slog.LevelError,
@@ -104,6 +112,13 @@ func (c *IAMGroupEntityCollector) Start(ctx context.Context) error {
 		marker = nextMarker
 	}
 
-	logCollector(ctx, c.TypedFeatureContext, slog.LevelInfo, "finished IAM group collection", "count", count)
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"finished IAM group collection",
+		"count",
+		count,
+	)
 	return nil
 }
