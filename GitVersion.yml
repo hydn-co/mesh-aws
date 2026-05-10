@@ -1,16 +1,19 @@
-mode: Mainline
+# Base version for all branches (no tags required)
+mode: ContinuousDeployment
+next-version: 0.1.0
+
 branches:
   main:
-    regex: ^main$
-    tag: ''
-    increment: Patch
-    prevent-increment-of-merged-branch-version: true
+    regex: ^(?<BranchName>master|main)$
+  develop:
+    regex: ^(?<BranchName>dev(elop)?(ment)?)$
+    label: "alpha"
   feature:
-    regex: ^feature[/-]
-    tag: alpha
-    increment: Minor
+    regex: ^features?[/-](?<BranchName>.+)
+    label: "{BranchName}"
   pull-request:
-    regex: ^(pull|pull\-requests|pr)[/-]
-    tag: PullRequest
-    tag-number-pattern: '[/-](?<number>\d+)[-/]'
-    increment: Inherit
+    regex: ^(pull-requests|pull|pr)[/-](?<BranchName>.+)
+    label: "{BranchName}"
+  unknown:
+    regex: (?<BranchName>.+)
+    label: "{BranchName}"
