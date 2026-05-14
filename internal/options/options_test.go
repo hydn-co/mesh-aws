@@ -54,6 +54,7 @@ func TestShouldExposeRegionEnumWhenRequested(t *testing.T) {
 	field, ok := reflect.TypeOf(options.AWSConnectionOptionsCore{}).FieldByName("Region")
 	require.True(t, ok)
 
+	assert.Equal(t, "required", field.Tag.Get("binding"))
 	enumTag := field.Tag.Get("enum")
 	require.NotEmpty(t, enumTag)
 	assert.Contains(t, enumTag, "us-east-1")

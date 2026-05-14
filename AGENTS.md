@@ -15,7 +15,7 @@ AWS mesh connector for IAM, Identity Store, Organizations, CloudTrail, and IAM I
 
 ## Configuration notes
 
-- Authentication credentials are just `access_key_id` and `secret_access_key`.
+- Authentication credentials come from the `API Key and Secret` template as `api_key` and `api_secret`.
 - Shared AWS connection settings live in `AWSConnectionOptionsCore`.
 - `region` is a required option and is rendered as a select in the UI from the supported AWS region codes.
 - `session_token` is optional and is only needed for temporary credentials such as STS-assumed roles.

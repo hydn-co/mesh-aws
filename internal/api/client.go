@@ -13,8 +13,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/hydn-co/mesh-aws/internal/credentials"
 )
 
 const (
@@ -36,14 +34,20 @@ const (
 
 // Client sends signed HTTP requests to AWS IAM and CloudTrail.
 type Client struct {
-	creds        *credentials.AWSCredentials
+	creds        *AWSCredentials
 	region       string
 	sessionToken string
 	http         *http.Client
 }
 
+// AWSCredentials holds the AWS signing credentials parsed from connector configuration.
+type AWSCredentials struct {
+	AccessKeyID     string
+	SecretAccessKey string
+}
+
 // NewClient creates a new Client from the given credentials.
-func NewClient(creds *credentials.AWSCredentials, region, sessionToken string) (*Client, error) {
+func NewClient(creds *AWSCredentials, region, sessionToken string) (*Client, error) {
 	if creds == nil {
 		return nil, fmt.Errorf("credentials are required")
 	}

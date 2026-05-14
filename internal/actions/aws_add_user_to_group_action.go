@@ -6,7 +6,6 @@ import (
 	"log/slog"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
-	"github.com/hydn-co/mesh-aws/internal/credentials"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
@@ -36,11 +35,12 @@ func (a *AWSAddUserToGroupAction) Init(ctx context.Context) error {
 		return err
 	}
 
-	creds, err := credentials.Parse(a.GetCredentials())
 	opts := a.GetOptions()
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(a.GetCredentials())
 	if err != nil {
-		return fmt.Errorf("parse credentials: %w", err)
+		return fmt.Errorf("parse AWS credentials: %w", err)
 	}
+	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
 	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {

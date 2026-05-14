@@ -21,10 +21,12 @@ Credentials:
 
 ```json
 {
-	"access_key_id": "AKIA...",
-	"secret_access_key": "..."
+	"api_key": "AKIA...",
+	"api_secret": "..."
 }
 ```
+
+`api_key` maps to the AWS access key ID, and `api_secret` maps to the AWS secret access key.
 
 Shared AWS connection options:
 

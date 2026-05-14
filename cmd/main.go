@@ -32,7 +32,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSAccountEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSAccountEntityCollector),
 	)
 
@@ -45,7 +45,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSGroupEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSGroupEntityCollector),
 	)
 
@@ -58,7 +58,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSRoleEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSRoleEntityCollector),
 	)
 
@@ -71,7 +71,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSPolicyEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSPolicyEntityCollector),
 	)
 
@@ -84,7 +84,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSMFAEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSMFAEntityCollector),
 	)
 
@@ -97,7 +97,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSCloudTrailActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSCloudTrailActivityCollector),
 	)
 
@@ -110,7 +110,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSSSOLoginActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(collectors.NewAWSSSOLoginActivityCollector),
 	)
 
@@ -123,7 +123,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSAddUserToGroupActionOptions),
 		new(payloads.AWSAddUserToGroupPayload),
 		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
+		runner.APIKeyAndSecretCredential,
 		runner.Factory(actions.NewAWSAddUserToGroupAction),
 	)
 
