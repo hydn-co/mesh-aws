@@ -1,63 +1,47 @@
 # mesh-aws
 
-AWS mesh connector — collects IAM users, groups, roles, policies and CloudTrail activity.
+AWS mesh connector for IAM, Identity Store, Organizations, CloudTrail, and IAM Identity Center activity.
 
-## Repository Structure
+## Current surface
+
+- `aws_account_entity_collector` emits account entities for IAM users, Identity Store users, the Organizations management account, and group membership links.
+- `aws_group_entity_collector` emits group entities for IAM groups and Identity Store groups.
+- `aws_role_entity_collector` emits IAM role entities.
+- `aws_policy_entity_collector` emits IAM managed policy entities.
+- `aws_mfa_entity_collector` emits virtual MFA entities and account-to-MFA links.
+- `aws_cloudtrail_activity_collector` emits CloudTrail login activity.
+- `aws_sso_login_activity_collector` emits IAM Identity Center login activity from CloudTrail.
+- `aws_add_user_to_group_action` adds an IAM user to an IAM group.
+
+## Configuration notes
+
+- Authentication credentials are just `access_key_id` and `secret_access_key`.
+- Shared AWS connection settings live in `AWSConnectionOptionsCore`.
+- `region` is a required option and is rendered as a select in the UI from the supported AWS region codes.
+- `session_token` is optional and is only needed for temporary credentials such as STS-assumed roles.
+- `identity_store_id` is optional and applies to the account and group collectors when enumerating Identity Store data.
+
+## Repository structure
 
 ```
 cmd/            Entry point (main.go)
 internal/
-  api/          AWS SDK v2 client wrapper
+  api/          AWS HTTP client and service wrappers
   actions/      Action feature implementations
   collectors/   Collector feature implementations
   credentials/  AWS credential parsing
-  options/      Feature option types
+  options/      Feature option types and shared connection settings
   payloads/     Action payload types
 .github/
-  workflows/    CI, release and version workflows
+  workflows/    CI, release, and version workflows
 ```
 
-## Development Commands
+## Development commands
 
 ```bash
-# Build
 go build ./...
-
-# Vet
 go vet ./...
-
-# Test
 go test ./...
-
-# Generate manifest
 go run ./cmd -describe
-
-# List features
 go run ./cmd -list
-```
-
-## Features
-
-| Name | Type | Description |
-|---|---|---|
-| collect-users | collector | Lists IAM users → Account entities |
-| collect-groups | collector | Lists IAM groups → Group entities |
-| collect-roles | collector | Lists IAM roles → Role entities |
-| collect-policies | collector | Lists customer-managed IAM policies → Policy entities |
-| collect-activity | collector | Collects CloudTrail ConsoleLogin events → login activity |
-| disable-user | action | Disables IAM user (login profile, access keys, MFA) |
-| add-user-to-group | action | Adds IAM user to a group |
-| remove-user-from-group | action | Removes IAM user from a group |
-
-## Credentials
-
-The connector expects AWS credentials as JSON:
-
-```json
-{
-  "access_key_id": "AKIA...",
-  "secret_access_key": "...",
-  "region": "us-east-1",
-  "session_token": ""
-}
 ```

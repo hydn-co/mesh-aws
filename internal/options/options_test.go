@@ -2,6 +2,8 @@ package options_test
 
 import (
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/fgrzl/json/polymorphic"
@@ -46,6 +48,18 @@ func TestShouldRequireConnectionRegionWhenValidated(t *testing.T) {
 
 	require.Error(t, err)
 	assert.Equal(t, "region is required", err.Error())
+}
+
+func TestShouldExposeRegionEnumWhenRequested(t *testing.T) {
+	field, ok := reflect.TypeOf(options.AWSConnectionOptionsCore{}).FieldByName("Region")
+	require.True(t, ok)
+
+	enumTag := field.Tag.Get("enum")
+	require.NotEmpty(t, enumTag)
+	assert.Contains(t, enumTag, "us-east-1")
+	assert.Contains(t, enumTag, "us-west-2")
+	assert.Contains(t, enumTag, "us-gov-west-1")
+	assert.Greater(t, len(strings.Split(enumTag, ",")), 20)
 }
 
 func TestShouldReturnGroupDiscriminatorWhenRequested(t *testing.T) {
