@@ -1,6 +1,8 @@
 package main
 
 import (
+	"log"
+
 	"github.com/hydn-co/mesh-aws/internal/actions"
 	"github.com/hydn-co/mesh-aws/internal/collectors"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -10,153 +12,124 @@ import (
 )
 
 func main() {
+	runner.Run(WithManifest())
+}
+
+func WithManifest() *runner.Manifest {
 	manifest := runner.CreateManifest(
-		"aws",
+		"mesh-aws",
 		"",
 		"Amazon Web Services",
-		"Collects IAM users, groups, roles, policies and CloudTrail activity from AWS.",
-	)
-
-	manifest.MustRegisterFeature("collect-users", "Collect IAM Users",
-		"Lists all IAM users and emits Account entities.",
-		runner.FeatureSchedulable, runner.FeatureTypeCollector,
-		&options.UsersOptions{}, (*connector.NoPayload)(nil),
-		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
-		runner.Factory(collectors.NewIAMUserEntityCollector),
-	)
-
-	manifest.MustRegisterFeature("collect-groups", "Collect IAM Groups",
-		"Lists all IAM groups and emits Group entities.",
-		runner.FeatureSchedulable, runner.FeatureTypeCollector,
-		&options.GroupsOptions{}, (*connector.NoPayload)(nil),
-		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
-		runner.Factory(collectors.NewIAMGroupEntityCollector),
-	)
-
-	manifest.MustRegisterFeature("collect-roles", "Collect IAM Roles",
-		"Lists all IAM roles and emits Role entities.",
-		runner.FeatureSchedulable, runner.FeatureTypeCollector,
-		&options.RolesOptions{}, (*connector.NoPayload)(nil),
-		runner.FeatureResumeBehaviorNone,
-		runner.AWSAccessKeyCredential,
-		runner.Factory(collectors.NewIAMRoleEntityCollector),
+		"Mesh integration with Amazon Web Services",
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-policies",
-		"Collect IAM Policies",
-		"Lists all customer-managed IAM policies and emits Policy entities.",
+		"aws_account_entity_collector",
+		"Collect Accounts",
+		"Collects IAM users, Identity Store users, the management account, and group membership links as account-space data.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.PoliciesOptions{},
+		new(options.AWSAccountEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewIAMPolicyEntityCollector,
-		),
+		runner.Factory(collectors.NewAWSAccountEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-virtual-mfa-devices",
-		"Collect IAM Virtual MFA Devices",
-		"Lists IAM virtual MFA devices and emits multi-factor entities and account bindings.",
+		"aws_group_entity_collector",
+		"Collect Groups",
+		"Collects IAM groups and Identity Store groups as group entities.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.VirtualMFADevicesOptions{},
+		new(options.AWSGroupEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewIAMVirtualMFADeviceEntityCollector,
-		),
+		runner.Factory(collectors.NewAWSGroupEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-identity-store-users",
-		"Collect Identity Store Users",
-		"Lists AWS Identity Store users and emits account entities.",
+		"aws_role_entity_collector",
+		"Collect Roles",
+		"Collects IAM roles as role entities.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.IdentityStoreUsersOptions{},
+		new(options.AWSRoleEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewIdentityStoreUserEntityCollector,
-		),
+		runner.Factory(collectors.NewAWSRoleEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-identity-store-groups",
-		"Collect Identity Store Groups",
-		"Lists AWS Identity Store groups and emits group entities.",
+		"aws_policy_entity_collector",
+		"Collect Policies",
+		"Collects IAM local policies as policy entities.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.IdentityStoreGroupsOptions{},
+		new(options.AWSPolicyEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewIdentityStoreGroupEntityCollector,
-		),
+		runner.Factory(collectors.NewAWSPolicyEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-master-account",
-		"Collect Organization Master Account",
-		"Describes the AWS organization and emits the management account as an account entity.",
+		"aws_mfa_entity_collector",
+		"Collect MFA Devices",
+		"Collects IAM virtual MFA devices and account MFA links.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.MasterAccountOptions{},
+		new(options.AWSMFAEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewMasterAccountEntityCollector,
-		),
+		runner.Factory(collectors.NewAWSMFAEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-activity",
+		"aws_cloudtrail_activity_collector",
 		"Collect CloudTrail Activity",
-		"Collects ConsoleLogin events from CloudTrail and emits login activity events.",
+		"Collects CloudTrail ConsoleLogin events and emits login activity events.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.ActivityOptions{},
+		new(options.AWSCloudTrailActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewCloudTrailActivityCollector,
-		),
+		runner.Factory(collectors.NewAWSCloudTrailActivityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"collect-sso-activity",
-		"Collect AWS SSO Activity",
-		"Collects AWS SSO login activity from CloudTrail and emits login activity events.",
+		"aws_sso_login_activity_collector",
+		"Collect SSO Login Activity",
+		"Collects IAM Identity Center login activity from CloudTrail and emits login activity events.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		&options.SSOActivityOptions{},
+		new(options.AWSSSOLoginActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(
-			collectors.NewSSOLoginActivityCollector,
-		),
+		runner.Factory(collectors.NewAWSSSOLoginActivityCollector),
 	)
 
-	manifest.MustRegisterFeature("add-user-to-group", "Add User to Group",
+	manifest.MustRegisterFeature(
+		"aws_add_user_to_group_action",
+		"Add User to Group",
 		"Adds an IAM user to an IAM group.",
-		runner.FeatureUnschedulable, runner.FeatureTypeAction,
-		&options.GroupsOptions{}, &payloads.AddUserToGroupPayload{},
+		runner.FeatureUnschedulable,
+		runner.FeatureTypeAction,
+		new(options.AWSAddUserToGroupActionOptions),
+		new(payloads.AWSAddUserToGroupPayload),
 		runner.FeatureResumeBehaviorNone,
 		runner.AWSAccessKeyCredential,
-		runner.Factory(actions.NewAddUserToGroupAction),
+		runner.Factory(actions.NewAWSAddUserToGroupAction),
 	)
 
-	runner.Run(manifest)
+	if err := manifest.Validate(); err != nil {
+		log.Fatal(err)
+	}
+
+	return manifest
 }

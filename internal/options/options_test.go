@@ -11,154 +11,140 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestShouldReturnUsersDiscriminatorWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.UsersOptions{}
+func TestShouldReturnAccountDiscriminatorWhenRequested(t *testing.T) {
+	option := &options.AWSAccountEntityCollectorOptions{}
 
-	// Act.
-	discriminator := option.GetDiscriminator()
-
-	// Assert.
-	assert.Equal(t, "mesh://aws/options/users", discriminator)
+	assert.Equal(t, "mesh://aws/collectors/account_entity_collector_options", option.GetDiscriminator())
 }
 
-func TestShouldReturnUsersSpacesWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.UsersOptions{}
+func TestShouldReturnAccountSpacesWhenRequested(t *testing.T) {
+	option := &options.AWSAccountEntityCollectorOptions{}
 
-	// Act.
-	optionSpaces := option.GetSpaces()
-
-	// Assert.
-	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.GroupMembers}, optionSpaces)
+	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.GroupMembers}, option.GetSpaces())
 }
 
-func TestShouldReturnUsersRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.UsersOptions{}
+func TestShouldReturnAccountRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSAccountEntityCollectorOptions{}
 
-	// Act.
-	requirements := option.GetRequirements()
-
-	// Assert.
-	assert.Equal(t, []string{"aws", "iam"}, requirements)
+	assert.Equal(t, []string{"aws", "iam", "organizations"}, option.GetRequirements())
 }
 
-func TestShouldReturnActivitySpacesWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.ActivityOptions{}
+func TestShouldReturnConnectionRegionWhenRequested(t *testing.T) {
+	option := &options.AWSConnectionOptionsCore{Region: " us-west-2 "}
 
-	// Act.
-	optionSpaces := option.GetSpaces()
-
-	// Assert.
-	assert.Equal(t, []spaces.Space{spaces.Activity}, optionSpaces)
+	assert.Equal(t, "us-west-2", option.GetRegion())
 }
 
-func TestShouldReturnActivityRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.ActivityOptions{}
+func TestShouldReturnConnectionSessionTokenWhenRequested(t *testing.T) {
+	option := &options.AWSConnectionOptionsCore{SessionToken: " token "}
 
-	// Act.
-	requirements := option.GetRequirements()
-
-	// Assert.
-	assert.Equal(t, []string{"aws", "cloudtrail"}, requirements)
+	assert.Equal(t, "token", option.GetSessionToken())
 }
 
-func TestShouldReturnIdentityStoreUsersRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.IdentityStoreUsersOptions{}
+func TestShouldRequireConnectionRegionWhenValidated(t *testing.T) {
+	err := (&options.AWSConnectionOptionsCore{}).Validate()
 
-	// Act.
-	requirements := option.GetRequirements()
-
-	// Assert.
-	assert.Equal(t, []string{"aws", "identitystore"}, requirements)
+	require.Error(t, err)
+	assert.Equal(t, "region is required", err.Error())
 }
 
-func TestShouldReturnIdentityStoreGroupsRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.IdentityStoreGroupsOptions{}
+func TestShouldReturnGroupDiscriminatorWhenRequested(t *testing.T) {
+	option := &options.AWSGroupEntityCollectorOptions{}
 
-	// Act.
-	requirements := option.GetRequirements()
-
-	// Assert.
-	assert.Equal(t, []string{"aws", "identitystore"}, requirements)
+	assert.Equal(t, "mesh://aws/collectors/group_entity_collector_options", option.GetDiscriminator())
 }
 
-func TestShouldReturnMasterAccountRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.MasterAccountOptions{}
+func TestShouldReturnGroupSpacesWhenRequested(t *testing.T) {
+	option := &options.AWSGroupEntityCollectorOptions{}
 
-	// Act.
-	requirements := option.GetRequirements()
-
-	// Assert.
-	assert.Equal(t, []string{"aws", "organizations"}, requirements)
+	assert.Equal(t, []spaces.Space{spaces.Groups}, option.GetSpaces())
 }
 
-func TestShouldReturnSSOActivityRequirementsWhenRequested(t *testing.T) {
-	// Arrange.
-	option := &options.SSOActivityOptions{}
+func TestShouldReturnGroupRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSGroupEntityCollectorOptions{}
 
-	// Act.
-	requirements := option.GetRequirements()
+	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
+}
 
-	// Assert.
-	assert.Equal(t, []string{"aws", "cloudtrail", "identitycenter"}, requirements)
+func TestShouldReturnRoleRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSRoleEntityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
+}
+
+func TestShouldReturnPolicyRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSPolicyEntityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
+}
+
+func TestShouldReturnMFASpacesWhenRequested(t *testing.T) {
+	option := &options.AWSMFAEntityCollectorOptions{}
+
+	assert.Equal(t, []spaces.Space{spaces.MultiFactors, spaces.AccountMultiFactors}, option.GetSpaces())
+}
+
+func TestShouldReturnCloudTrailRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSCloudTrailActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail"}, option.GetRequirements())
+}
+
+func TestShouldReturnSSORequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSSSOLoginActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "identitycenter"}, option.GetRequirements())
+}
+
+func TestShouldReturnAddUserToGroupSpacesWhenRequested(t *testing.T) {
+	option := &options.AWSAddUserToGroupActionOptions{}
+
+	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.Groups, spaces.GroupMembers}, option.GetSpaces())
+}
+
+func TestShouldReturnAddUserToGroupRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSAddUserToGroupActionOptions{}
+
+	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
 }
 
 func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
-	// Arrange.
 	registeredOptions := map[string]any{
-		"mesh://aws/options/users":                 &options.UsersOptions{},
-		"mesh://aws/options/groups":                &options.GroupsOptions{},
-		"mesh://aws/options/roles":                 &options.RolesOptions{},
-		"mesh://aws/options/policies":              &options.PoliciesOptions{},
-		"mesh://aws/options/activity":              &options.ActivityOptions{},
-		"mesh://aws/options/virtual-mfa-devices":   &options.VirtualMFADevicesOptions{},
-		"mesh://aws/options/identity-store-users":  &options.IdentityStoreUsersOptions{},
-		"mesh://aws/options/identity-store-groups": &options.IdentityStoreGroupsOptions{},
-		"mesh://aws/options/master-account":        &options.MasterAccountOptions{},
-		"mesh://aws/options/sso-activity":          &options.SSOActivityOptions{},
+		"mesh://aws/collectors/account_entity_collector_options":      &options.AWSAccountEntityCollectorOptions{},
+		"mesh://aws/collectors/group_entity_collector_options":        &options.AWSGroupEntityCollectorOptions{},
+		"mesh://aws/collectors/role_entity_collector_options":         &options.AWSRoleEntityCollectorOptions{},
+		"mesh://aws/collectors/policy_entity_collector_options":       &options.AWSPolicyEntityCollectorOptions{},
+		"mesh://aws/collectors/mfa_entity_collector_options":          &options.AWSMFAEntityCollectorOptions{},
+		"mesh://aws/collectors/cloudtrail_activity_collector_options": &options.AWSCloudTrailActivityCollectorOptions{},
+		"mesh://aws/collectors/sso_login_activity_collector_options":  &options.AWSSSOLoginActivityCollectorOptions{},
+		"mesh://aws/actions/add_user_to_group_action_options":         &options.AWSAddUserToGroupActionOptions{},
 	}
 
-	// Act.
 	for discriminator, expectedType := range registeredOptions {
 		created, err := polymorphic.CreateInstance(discriminator)
 
-		// Assert.
 		require.NoError(t, err)
 		require.NotNil(t, created)
 		assert.IsType(t, expectedType, created)
 	}
 
-	// Assert.
-	assert.Len(t, registeredOptions, 10)
-	assert.Equal(t, "mesh://aws/options/users", (&options.UsersOptions{}).GetDiscriminator())
+	assert.Len(t, registeredOptions, 8)
 }
 
-func TestShouldRoundTripUsersOptionsWhenEncodedPolymorphically(t *testing.T) {
-	// Arrange.
-	original := &options.UsersOptions{}
+func TestShouldRoundTripAccountOptionsWhenEncodedPolymorphically(t *testing.T) {
+	original := &options.AWSAccountEntityCollectorOptions{}
 	envelope := polymorphic.NewEnvelope(original)
 
-	// Act.
 	data, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
 	var restored polymorphic.Envelope
 	err = json.Unmarshal(data, &restored)
 
-	// Assert.
 	require.NoError(t, err)
-	restoredOption, ok := restored.Content.(*options.UsersOptions)
+	restoredOption, ok := restored.Content.(*options.AWSAccountEntityCollectorOptions)
 	require.True(t, ok)
 	assert.Equal(t, original.GetDiscriminator(), restoredOption.GetDiscriminator())
 	assert.Equal(t, original.GetSpaces(), restoredOption.GetSpaces())
 	assert.Equal(t, original.GetRequirements(), restoredOption.GetRequirements())
-
-	// Assert.
 }

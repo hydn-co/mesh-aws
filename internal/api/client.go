@@ -36,18 +36,26 @@ const (
 
 // Client sends signed HTTP requests to AWS IAM and CloudTrail.
 type Client struct {
-	creds *credentials.AWSCredentials
-	http  *http.Client
+	creds        *credentials.AWSCredentials
+	region       string
+	sessionToken string
+	http         *http.Client
 }
 
 // NewClient creates a new Client from the given credentials.
-func NewClient(creds *credentials.AWSCredentials) (*Client, error) {
+func NewClient(creds *credentials.AWSCredentials, region, sessionToken string) (*Client, error) {
 	if creds == nil {
 		return nil, fmt.Errorf("credentials are required")
 	}
+	region = strings.TrimSpace(region)
+	if region == "" {
+		return nil, fmt.Errorf("region is required")
+	}
 	return &Client{
-		creds: creds,
-		http:  &http.Client{Timeout: 30 * time.Second},
+		creds:        creds,
+		region:       region,
+		sessionToken: strings.TrimSpace(sessionToken),
+		http:         &http.Client{Timeout: 30 * time.Second},
 	}, nil
 }
 
@@ -92,17 +100,17 @@ func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte,
 
 // cloudtrailPost sends a signed POST to the CloudTrail JSON API.
 func (c *Client) cloudtrailPost(ctx context.Context, target string, body []byte) ([]byte, error) {
-	endpoint := fmt.Sprintf(cloudtrailEndpoint, c.creds.Region)
+	endpoint := fmt.Sprintf(cloudtrailEndpoint, c.region)
 	return c.awsJSONPost(ctx, endpoint, target, cloudtrailService, body)
 }
 
 func (c *Client) identityStorePost(ctx context.Context, target string, body []byte) ([]byte, error) {
-	endpoint := fmt.Sprintf(identityStoreEndpoint, c.creds.Region)
+	endpoint := fmt.Sprintf(identityStoreEndpoint, c.region)
 	return c.awsJSONPost(ctx, endpoint, target, identityStoreService, body)
 }
 
 func (c *Client) organizationsPost(ctx context.Context, target string, body []byte) ([]byte, error) {
-	endpoint := fmt.Sprintf(organizationsEndpoint, c.creds.Region)
+	endpoint := fmt.Sprintf(organizationsEndpoint, c.region)
 	return c.awsJSONPost(ctx, endpoint, target, organizationsService, body)
 }
 
@@ -115,7 +123,7 @@ func (c *Client) awsJSONPost(ctx context.Context, endpoint, target, service stri
 	req.Header.Set("Content-Type", "application/x-amz-json-1.1")
 	req.Header.Set("X-Amz-Target", target)
 
-	c.sign(req, service, c.creds.Region, body)
+	c.sign(req, service, c.region, body)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
@@ -144,8 +152,8 @@ func (c *Client) sign(req *http.Request, service, region string, body []byte) {
 	date := now.Format(awsDateFormat)
 
 	req.Header.Set("X-Amz-Date", dateTime)
-	if c.creds.SessionToken != "" {
-		req.Header.Set("X-Amz-Security-Token", c.creds.SessionToken)
+	if c.sessionToken != "" {
+		req.Header.Set("X-Amz-Security-Token", c.sessionToken)
 	}
 
 	bodyHash := hexSHA256(body)

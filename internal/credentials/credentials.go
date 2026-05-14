@@ -9,8 +9,6 @@ import (
 type AWSCredentials struct {
 	AccessKeyID     string `json:"access_key_id"`
 	SecretAccessKey string `json:"secret_access_key"`
-	Region          string `json:"region"`
-	SessionToken    string `json:"session_token,omitempty"`
 }
 
 // Parse decodes AWSCredentials from a raw JSON message.
@@ -27,9 +25,6 @@ func Parse(raw json.RawMessage) (*AWSCredentials, error) {
 	}
 	if creds.SecretAccessKey == "" {
 		return nil, fmt.Errorf("secret_access_key is required")
-	}
-	if creds.Region == "" {
-		return nil, fmt.Errorf("region is required")
 	}
 	return &creds, nil
 }
