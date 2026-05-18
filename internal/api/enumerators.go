@@ -11,7 +11,7 @@ import (
 func (c *Client) IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[IAMUser] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMUser, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMUser, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -30,7 +30,7 @@ func (c *Client) IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[I
 func (c *Client) IAMGroupEnumerator(ctx context.Context) enumerators.Enumerator[IAMGroup] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMGroup, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMGroup, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -49,7 +49,7 @@ func (c *Client) IAMGroupEnumerator(ctx context.Context) enumerators.Enumerator[
 func (c *Client) IAMGroupsForUserEnumerator(ctx context.Context, userName string) enumerators.Enumerator[IAMGroup] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMGroup, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMGroup, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -68,7 +68,7 @@ func (c *Client) IAMGroupsForUserEnumerator(ctx context.Context, userName string
 func (c *Client) IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[IAMRole] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMRole, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMRole, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -87,7 +87,7 @@ func (c *Client) IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[I
 func (c *Client) IAMPolicyEnumerator(ctx context.Context, scope string) enumerators.Enumerator[IAMPolicy] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMPolicy, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMPolicy, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -106,7 +106,7 @@ func (c *Client) IAMPolicyEnumerator(ctx context.Context, scope string) enumerat
 func (c *Client) IAMVirtualMFADeviceEnumerator(ctx context.Context) enumerators.Enumerator[IAMVirtualMFADevice] {
 	marker := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IAMVirtualMFADevice, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IAMVirtualMFADevice, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -128,7 +128,7 @@ func (c *Client) IdentityStoreUserEnumerator(
 ) enumerators.Enumerator[IdentityStoreUser] {
 	nextToken := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IdentityStoreUser, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IdentityStoreUser, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -150,7 +150,7 @@ func (c *Client) IdentityStoreGroupEnumerator(
 ) enumerators.Enumerator[IdentityStoreGroup] {
 	nextToken := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IdentityStoreGroup, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IdentityStoreGroup, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -172,7 +172,7 @@ func (c *Client) IdentityStoreGroupMembershipEnumerator(
 ) enumerators.Enumerator[IdentityStoreGroupMembership] {
 	nextToken := ""
 
-	return enumerators.PageItemEnumerator(func() ([]IdentityStoreGroupMembership, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]IdentityStoreGroupMembership, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
@@ -195,7 +195,7 @@ func (c *Client) CloudTrailEventEnumerator(
 ) enumerators.Enumerator[CloudTrailEvent] {
 	nextToken := ""
 
-	return enumerators.PageItemEnumerator(func() ([]CloudTrailEvent, bool, error) {
+	return awsPageEnumerator(ctx, func() ([]CloudTrailEvent, bool, error) {
 		if err := ctx.Err(); err != nil {
 			return nil, false, err
 		}
