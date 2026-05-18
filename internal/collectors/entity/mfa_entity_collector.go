@@ -1,4 +1,4 @@
-package collectors
+package entity
 
 import (
 	"context"
@@ -14,18 +14,35 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
+type awsMFAEntityClient interface {
+	IAMVirtualMFADeviceEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMVirtualMFADevice]
+}
+
+type awsMFAEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsMFAEntityClient, error)
+
 // AWSMFAEntityCollector collects AWS IAM MFA entities and account associations.
 type AWSMFAEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSMFAEntityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    awsMFAEntityClient
+	newClient awsMFAEntityClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSMFAEntityCollector constructs the collector with the given feature context.
 func NewAWSMFAEntityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSMFAEntityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSMFAEntityCollector{TypedFeatureContext: ctx}
+	return &AWSMFAEntityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultAWSMFAEntityClientFactory,
+	}
+}
+
+func defaultAWSMFAEntityClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (awsMFAEntityClient, error) {
+	return api.NewClient(creds, region, sessionToken)
 }
 
 func (c *AWSMFAEntityCollector) Init(ctx context.Context) error {
@@ -40,7 +57,10 @@ func (c *AWSMFAEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultAWSMFAEntityClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

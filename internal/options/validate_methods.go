@@ -46,7 +46,7 @@ func (o *AWSMFAEntityCollectorOptions) Validate() error {
 	return o.AWSConnectionOptionsCore.Validate()
 }
 
-func (o *AWSCloudTrailActivityCollectorOptions) Validate() error {
+func (o *AWSLoginActivityCollectorOptions) Validate() error {
 	if o == nil {
 		return nil
 	}
@@ -54,7 +54,55 @@ func (o *AWSCloudTrailActivityCollectorOptions) Validate() error {
 	return o.AWSConnectionOptionsCore.Validate()
 }
 
-func (o *AWSSSOLoginActivityCollectorOptions) Validate() error {
+func (o *AWSCognitoUserPoolAdminActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSSessionActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSGroupActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSGroupMembershipActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSRoleActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSEntitlementActivityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSAccountActivityCollectorOptions) Validate() error {
 	if o == nil {
 		return nil
 	}

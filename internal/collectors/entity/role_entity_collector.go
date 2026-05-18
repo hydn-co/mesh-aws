@@ -1,4 +1,4 @@
-package collectors
+package entity
 
 import (
 	"context"
@@ -14,18 +14,35 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
+type awsRoleEntityClient interface {
+	IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMRole]
+}
+
+type awsRoleEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsRoleEntityClient, error)
+
 // AWSRoleEntityCollector collects AWS IAM role entities.
 type AWSRoleEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSRoleEntityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    awsRoleEntityClient
+	newClient awsRoleEntityClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSRoleEntityCollector constructs the collector with the given feature context.
 func NewAWSRoleEntityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSRoleEntityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSRoleEntityCollector{TypedFeatureContext: ctx}
+	return &AWSRoleEntityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultAWSRoleEntityClientFactory,
+	}
+}
+
+func defaultAWSRoleEntityClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (awsRoleEntityClient, error) {
+	return api.NewClient(creds, region, sessionToken)
 }
 
 func (c *AWSRoleEntityCollector) Init(ctx context.Context) error {
@@ -40,7 +57,10 @@ func (c *AWSRoleEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultAWSRoleEntityClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

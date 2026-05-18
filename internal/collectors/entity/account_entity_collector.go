@@ -1,4 +1,4 @@
-package collectors
+package entity
 
 import (
 	"context"
@@ -15,18 +15,49 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
+type awsAccountEntityClient interface {
+	IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMUser]
+	IAMGroupsForUserEnumerator(ctx context.Context, userName string) enumerators.Enumerator[api.IAMGroup]
+	IdentityStoreUserEnumerator(
+		ctx context.Context,
+		identityStoreID string,
+	) enumerators.Enumerator[api.IdentityStoreUser]
+	IdentityStoreGroupEnumerator(
+		ctx context.Context,
+		identityStoreID string,
+	) enumerators.Enumerator[api.IdentityStoreGroup]
+	IdentityStoreGroupMembershipEnumerator(
+		ctx context.Context,
+		identityStoreID, groupID string,
+	) enumerators.Enumerator[api.IdentityStoreGroupMembership]
+	DescribeOrganization(ctx context.Context) (*api.Organization, error)
+}
+
+type awsAccountEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsAccountEntityClient, error)
+
 // AWSAccountEntityCollector collects AWS account-related entities and membership links.
 type AWSAccountEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSAccountEntityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    awsAccountEntityClient
+	newClient awsAccountEntityClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSAccountEntityCollector constructs the collector with the given feature context.
 func NewAWSAccountEntityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSAccountEntityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSAccountEntityCollector{TypedFeatureContext: ctx}
+	return &AWSAccountEntityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultAWSAccountEntityClientFactory,
+	}
+}
+
+func defaultAWSAccountEntityClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (awsAccountEntityClient, error) {
+	return api.NewClient(creds, region, sessionToken)
 }
 
 func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
@@ -41,7 +72,10 @@ func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultAWSAccountEntityClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

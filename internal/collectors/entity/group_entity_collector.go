@@ -1,4 +1,4 @@
-package collectors
+package entity
 
 import (
 	"context"
@@ -14,18 +14,39 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
+type awsGroupEntityClient interface {
+	IAMGroupEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMGroup]
+	IdentityStoreGroupEnumerator(
+		ctx context.Context,
+		identityStoreID string,
+	) enumerators.Enumerator[api.IdentityStoreGroup]
+}
+
+type awsGroupEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsGroupEntityClient, error)
+
 // AWSGroupEntityCollector collects AWS group entities from IAM and Identity Store.
 type AWSGroupEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupEntityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    awsGroupEntityClient
+	newClient awsGroupEntityClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSGroupEntityCollector constructs the collector with the given feature context.
 func NewAWSGroupEntityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSGroupEntityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSGroupEntityCollector{TypedFeatureContext: ctx}
+	return &AWSGroupEntityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultAWSGroupEntityClientFactory,
+	}
+}
+
+func defaultAWSGroupEntityClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (awsGroupEntityClient, error) {
+	return api.NewClient(creds, region, sessionToken)
 }
 
 func (c *AWSGroupEntityCollector) Init(ctx context.Context) error {
@@ -40,7 +61,10 @@ func (c *AWSGroupEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultAWSGroupEntityClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

@@ -43,6 +43,13 @@ func TestShouldReturnConnectionSessionTokenWhenRequested(t *testing.T) {
 	assert.Equal(t, "token", option.GetSessionToken())
 }
 
+func TestShouldRequireIdentityStoreIDWhenValidated(t *testing.T) {
+	err := (&options.AWSIdentityStoreOptionsCore{}).Validate()
+
+	require.Error(t, err)
+	assert.Equal(t, "identity store id is required", err.Error())
+}
+
 func TestShouldRequireConnectionRegionWhenValidated(t *testing.T) {
 	err := (&options.AWSConnectionOptionsCore{}).Validate()
 
@@ -61,6 +68,14 @@ func TestShouldExposeRegionEnumWhenRequested(t *testing.T) {
 	assert.Contains(t, enumTag, "us-west-2")
 	assert.Contains(t, enumTag, "us-gov-west-1")
 	assert.Greater(t, len(strings.Split(enumTag, ",")), 20)
+}
+
+func TestShouldExposeIdentityStoreIDBindingWhenRequested(t *testing.T) {
+	field, ok := reflect.TypeOf(options.AWSIdentityStoreOptionsCore{}).FieldByName("IdentityStoreID")
+	require.True(t, ok)
+
+	assert.Equal(t, "identity_store_id", field.Tag.Get("json"))
+	assert.Equal(t, "required", field.Tag.Get("binding"))
 }
 
 func TestShouldReturnGroupDiscriminatorWhenRequested(t *testing.T) {
@@ -99,16 +114,96 @@ func TestShouldReturnMFASpacesWhenRequested(t *testing.T) {
 	assert.Equal(t, []spaces.Space{spaces.MultiFactors, spaces.AccountMultiFactors}, option.GetSpaces())
 }
 
-func TestShouldReturnCloudTrailRequirementsWhenRequested(t *testing.T) {
-	option := &options.AWSCloudTrailActivityCollectorOptions{}
+func TestShouldReturnLoginActivityDiscriminatorWhenRequested(t *testing.T) {
+	option := &options.AWSLoginActivityCollectorOptions{}
+
+	assert.Equal(t, "mesh://aws/collectors/login_activity_collector_options", option.GetDiscriminator())
+}
+
+func TestShouldReturnLoginRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSLoginActivityCollectorOptions{}
 
 	assert.Equal(t, []string{"aws", "cloudtrail"}, option.GetRequirements())
 }
 
-func TestShouldReturnSSORequirementsWhenRequested(t *testing.T) {
-	option := &options.AWSSSOLoginActivityCollectorOptions{}
+func TestShouldReturnActivityCollectorSpacesWhenRequested(t *testing.T) {
+	testCases := []struct {
+		name   string
+		option interface{ GetSpaces() []spaces.Space }
+	}{
+		{name: "login activity", option: &options.AWSLoginActivityCollectorOptions{}},
+		{name: "cognito user pool admin activity", option: &options.AWSCognitoUserPoolAdminActivityCollectorOptions{}},
+		{name: "session activity", option: &options.AWSSessionActivityCollectorOptions{}},
+		{name: "group activity", option: &options.AWSGroupActivityCollectorOptions{}},
+		{name: "group membership activity", option: &options.AWSGroupMembershipActivityCollectorOptions{}},
+		{name: "role activity", option: &options.AWSRoleActivityCollectorOptions{}},
+		{name: "entitlement activity", option: &options.AWSEntitlementActivityCollectorOptions{}},
+		{name: "account activity", option: &options.AWSAccountActivityCollectorOptions{}},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			assert.Equal(t, []spaces.Space{spaces.Activity}, testCase.option.GetSpaces())
+		})
+	}
+}
+
+func TestShouldReturnCognitoUserPoolAdminActivityDiscriminatorWhenRequested(t *testing.T) {
+	option := &options.AWSCognitoUserPoolAdminActivityCollectorOptions{}
+
+	assert.Equal(
+		t,
+		"mesh://aws/collectors/cognito_user_pool_admin_activity_collector_options",
+		option.GetDiscriminator(),
+	)
+}
+
+func TestShouldReturnCognitoUserPoolAdminActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSCognitoUserPoolAdminActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "cognitoidp"}, option.GetRequirements())
+}
+
+func TestShouldReturnSessionActivityDiscriminatorWhenRequested(t *testing.T) {
+	option := &options.AWSSessionActivityCollectorOptions{}
+
+	assert.Equal(t, "mesh://aws/collectors/session_activity_collector_options", option.GetDiscriminator())
+}
+
+func TestShouldReturnSessionRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSSessionActivityCollectorOptions{}
 
 	assert.Equal(t, []string{"aws", "cloudtrail", "identitycenter"}, option.GetRequirements())
+}
+
+func TestShouldReturnGroupActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSGroupActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "iam"}, option.GetRequirements())
+}
+
+func TestShouldReturnGroupMembershipActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSGroupMembershipActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "iam"}, option.GetRequirements())
+}
+
+func TestShouldReturnRoleActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSRoleActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "iam", "identitycenter"}, option.GetRequirements())
+}
+
+func TestShouldReturnEntitlementActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSEntitlementActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "iam", "identitycenter"}, option.GetRequirements())
+}
+
+func TestShouldReturnAccountActivityRequirementsWhenRequested(t *testing.T) {
+	option := &options.AWSAccountActivityCollectorOptions{}
+
+	assert.Equal(t, []string{"aws", "cloudtrail", "iam", "organizations"}, option.GetRequirements())
 }
 
 func TestShouldReturnAddUserToGroupSpacesWhenRequested(t *testing.T) {
@@ -125,14 +220,20 @@ func TestShouldReturnAddUserToGroupRequirementsWhenRequested(t *testing.T) {
 
 func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
 	registeredOptions := map[string]any{
-		"mesh://aws/collectors/account_entity_collector_options":      &options.AWSAccountEntityCollectorOptions{},
-		"mesh://aws/collectors/group_entity_collector_options":        &options.AWSGroupEntityCollectorOptions{},
-		"mesh://aws/collectors/role_entity_collector_options":         &options.AWSRoleEntityCollectorOptions{},
-		"mesh://aws/collectors/policy_entity_collector_options":       &options.AWSPolicyEntityCollectorOptions{},
-		"mesh://aws/collectors/mfa_entity_collector_options":          &options.AWSMFAEntityCollectorOptions{},
-		"mesh://aws/collectors/cloudtrail_activity_collector_options": &options.AWSCloudTrailActivityCollectorOptions{},
-		"mesh://aws/collectors/sso_login_activity_collector_options":  &options.AWSSSOLoginActivityCollectorOptions{},
-		"mesh://aws/actions/add_user_to_group_action_options":         &options.AWSAddUserToGroupActionOptions{},
+		"mesh://aws/collectors/account_entity_collector_options":                   &options.AWSAccountEntityCollectorOptions{},
+		"mesh://aws/collectors/group_entity_collector_options":                     &options.AWSGroupEntityCollectorOptions{},
+		"mesh://aws/collectors/role_entity_collector_options":                      &options.AWSRoleEntityCollectorOptions{},
+		"mesh://aws/collectors/policy_entity_collector_options":                    &options.AWSPolicyEntityCollectorOptions{},
+		"mesh://aws/collectors/mfa_entity_collector_options":                       &options.AWSMFAEntityCollectorOptions{},
+		"mesh://aws/collectors/login_activity_collector_options":                   &options.AWSLoginActivityCollectorOptions{},
+		"mesh://aws/collectors/cognito_user_pool_admin_activity_collector_options": &options.AWSCognitoUserPoolAdminActivityCollectorOptions{},
+		"mesh://aws/collectors/session_activity_collector_options":                 &options.AWSSessionActivityCollectorOptions{},
+		"mesh://aws/collectors/group_activity_collector_options":                   &options.AWSGroupActivityCollectorOptions{},
+		"mesh://aws/collectors/group_membership_activity_collector_options":        &options.AWSGroupMembershipActivityCollectorOptions{},
+		"mesh://aws/collectors/role_activity_collector_options":                    &options.AWSRoleActivityCollectorOptions{},
+		"mesh://aws/collectors/entitlement_activity_collector_options":             &options.AWSEntitlementActivityCollectorOptions{},
+		"mesh://aws/collectors/account_activity_collector_options":                 &options.AWSAccountActivityCollectorOptions{},
+		"mesh://aws/actions/add_user_to_group_action_options":                      &options.AWSAddUserToGroupActionOptions{},
 	}
 
 	for discriminator, expectedType := range registeredOptions {
@@ -143,7 +244,7 @@ func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
 		assert.IsType(t, expectedType, created)
 	}
 
-	assert.Len(t, registeredOptions, 8)
+	assert.Len(t, registeredOptions, 14)
 }
 
 func TestShouldRoundTripAccountOptionsWhenEncodedPolymorphically(t *testing.T) {

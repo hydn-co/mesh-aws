@@ -4,7 +4,8 @@ import (
 	"log"
 
 	"github.com/hydn-co/mesh-aws/internal/actions"
-	"github.com/hydn-co/mesh-aws/internal/collectors"
+	"github.com/hydn-co/mesh-aws/internal/collectors/activity"
+	"github.com/hydn-co/mesh-aws/internal/collectors/entity"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
@@ -33,7 +34,7 @@ func WithManifest() *runner.Manifest {
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSAccountEntityCollector),
+		runner.Factory(entity.NewAWSAccountEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
@@ -46,7 +47,7 @@ func WithManifest() *runner.Manifest {
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSGroupEntityCollector),
+		runner.Factory(entity.NewAWSGroupEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
@@ -59,7 +60,7 @@ func WithManifest() *runner.Manifest {
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSRoleEntityCollector),
+		runner.Factory(entity.NewAWSRoleEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
@@ -72,7 +73,7 @@ func WithManifest() *runner.Manifest {
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSPolicyEntityCollector),
+		runner.Factory(entity.NewAWSPolicyEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
@@ -85,33 +86,111 @@ func WithManifest() *runner.Manifest {
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSMFAEntityCollector),
+		runner.Factory(entity.NewAWSMFAEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"aws_cloudtrail_activity_collector",
-		"Collect CloudTrail Activity",
-		"Collects CloudTrail ConsoleLogin events and emits login activity events.",
+		"aws_login_activity_collector",
+		"Collect Login Activity",
+		"Collects AWS Management Console and IAM Identity Center login success and failure activity from CloudTrail.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		new(options.AWSCloudTrailActivityCollectorOptions),
+		new(options.AWSLoginActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSCloudTrailActivityCollector),
+		runner.Factory(activity.NewAWSLoginActivityCollector),
 	)
 
 	manifest.MustRegisterFeature(
-		"aws_sso_login_activity_collector",
-		"Collect SSO Login Activity",
-		"Collects IAM Identity Center login activity from CloudTrail and emits login activity events.",
+		"aws_session_activity_collector",
+		"Collect Session Activity",
+		"Collects IAM Identity Center session start and logout activity from CloudTrail.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
-		new(options.AWSSSOLoginActivityCollectorOptions),
+		new(options.AWSSessionActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
 		runner.APIKeyAndSecretCredential,
-		runner.Factory(collectors.NewAWSSSOLoginActivityCollector),
+		runner.Factory(activity.NewAWSSessionActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_cognito_user_pool_admin_activity_collector",
+		"Collect Cognito User Pool Admin Activity",
+		"Collects Amazon Cognito user pool administrative activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSCognitoUserPoolAdminActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSCognitoUserPoolAdminActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_group_activity_collector",
+		"Collect Group Activity",
+		"Collects IAM and Identity Store group creation and deletion activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSGroupActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSGroupActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_group_membership_activity_collector",
+		"Collect Group Membership Activity",
+		"Collects IAM and Identity Store group membership add and remove activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSGroupMembershipActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSGroupMembershipActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_role_activity_collector",
+		"Collect Role Activity",
+		"Collects IAM role, policy, and permission set creation and deletion activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSRoleActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSRoleActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_entitlement_activity_collector",
+		"Collect Entitlement Activity",
+		"Collects IAM permission and policy change activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSEntitlementActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSEntitlementActivityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_account_activity_collector",
+		"Collect Account Activity",
+		"Collects IAM user and AWS Organizations account creation and deletion activity from CloudTrail.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSAccountActivityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorLastActivity,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(activity.NewAWSAccountActivityCollector),
 	)
 
 	manifest.MustRegisterFeature(

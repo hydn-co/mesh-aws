@@ -39,9 +39,9 @@ func (o *AWSConnectionOptionsCore) Validate() error {
 	return nil
 }
 
-// AWSIdentityStoreOptionsCore contains the optional Identity Store identifier shared by account and group collectors.
+// AWSIdentityStoreOptionsCore contains the required Identity Store identifier shared by account and group collectors.
 type AWSIdentityStoreOptionsCore struct {
-	IdentityStoreID string `json:"identity_store_id,omitempty" title:"Identity Store ID" description:"AWS Identity Store identifier used when enumerating Identity Center users and memberships."`
+	IdentityStoreID string `json:"identity_store_id" title:"Identity Store ID" description:"AWS Identity Store identifier used when enumerating Identity Center users and memberships." binding:"required"`
 }
 
 func (o *AWSIdentityStoreOptionsCore) GetIdentityStoreID() string {
@@ -53,5 +53,13 @@ func (o *AWSIdentityStoreOptionsCore) GetIdentityStoreID() string {
 }
 
 func (o *AWSIdentityStoreOptionsCore) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	if o.GetIdentityStoreID() == "" {
+		return fmt.Errorf("identity store id is required")
+	}
+
 	return nil
 }

@@ -1,4 +1,4 @@
-package collectors
+package entity
 
 import (
 	"context"
@@ -14,18 +14,35 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
+type awsPolicyEntityClient interface {
+	IAMPolicyEnumerator(ctx context.Context, scope string) enumerators.Enumerator[api.IAMPolicy]
+}
+
+type awsPolicyEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsPolicyEntityClient, error)
+
 // AWSPolicyEntityCollector collects AWS IAM managed policy entities.
 type AWSPolicyEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSPolicyEntityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    awsPolicyEntityClient
+	newClient awsPolicyEntityClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSPolicyEntityCollector constructs the collector with the given feature context.
 func NewAWSPolicyEntityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSPolicyEntityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSPolicyEntityCollector{TypedFeatureContext: ctx}
+	return &AWSPolicyEntityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultAWSPolicyEntityClientFactory,
+	}
+}
+
+func defaultAWSPolicyEntityClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (awsPolicyEntityClient, error) {
+	return api.NewClient(creds, region, sessionToken)
 }
 
 func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
@@ -40,7 +57,10 @@ func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultAWSPolicyEntityClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}
