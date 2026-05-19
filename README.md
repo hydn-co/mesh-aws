@@ -18,6 +18,8 @@ AWS mesh connector for collecting IAM, Identity Store, Organizations, CloudTrail
 - `aws_account_activity_collector` emits account lifecycle activity.
 - `aws_cognito_user_pool_admin_activity_collector` emits Amazon Cognito user pool administrative activity.
 - `aws_add_user_to_group_action` adds an IAM user to an IAM group.
+- `aws_create_user_action` creates a new IAM user.
+- `aws_create_group_action` creates a new IAM group.
 
 ## Configuration
 
@@ -48,14 +50,13 @@ Shared AWS connection options:
 ## Repository structure
 
 ```text
-cmd/            Entry point (main.go)
+cmd/            Entry point (main.go, manifest.json)
 internal/
 	api/          AWS HTTP client and service wrappers
 	actions/      Action feature implementations
 	collectors/
 		activity/   Activity collector feature implementations
 		entity/     Entity collector feature implementations
-	credentials/  AWS credential parsing
 	options/      Feature option types and shared connection settings
 	payloads/     Action payload types
 ```
