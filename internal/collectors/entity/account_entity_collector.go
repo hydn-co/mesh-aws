@@ -18,6 +18,7 @@ import (
 type awsAccountEntityClient interface {
 	IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMUser]
 	IAMGroupsForUserEnumerator(ctx context.Context, userName string) enumerators.Enumerator[api.IAMGroup]
+	IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMRole]
 	IdentityStoreUserEnumerator(
 		ctx context.Context,
 		identityStoreID string,
@@ -31,6 +32,7 @@ type awsAccountEntityClient interface {
 		identityStoreID, groupID string,
 	) enumerators.Enumerator[api.IdentityStoreGroupMembership]
 	DescribeOrganization(ctx context.Context) (*api.Organization, error)
+	ListAccessKeys(ctx context.Context, userName string) ([]api.IAMAccessKey, error)
 }
 
 type awsAccountEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsAccountEntityClient, error)
@@ -103,6 +105,10 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 		return err
 	}
 
+	if err := c.emitServicePrincipalAccounts(ctx, &accountsEmitted); err != nil {
+		return err
+	}
+
 	if identityStoreID := opts.GetIdentityStoreID(); identityStoreID != "" {
 		if err := c.emitIdentityStoreAccountsAndMemberships(
 			ctx,
@@ -150,8 +156,21 @@ func (c *AWSAccountEntityCollector) emitIAMAccountsAndMemberships(
 		account.AccountRef = user.UserID
 		account.Name = user.UserName
 		account.Description = user.Arn
+		account.AccountType = types.AccountTypeUser
 		if !user.CreateDate.IsZero() {
 			account.CreatedAt = &user.CreateDate
+		}
+
+		// Determine enabled status: user is enabled if they have at least one active access key
+		accessKeys, err := c.client.ListAccessKeys(ctx, user.UserName)
+		if err != nil {
+			return fmt.Errorf("list access keys for user %s: %w", user.UserName, err)
+		}
+		for _, key := range accessKeys {
+			if key.Status == "Active" {
+				account.Enabled = true
+				break
+			}
 		}
 
 		if err := c.Emit(ctx, account); err != nil {
@@ -205,6 +224,7 @@ func (c *AWSAccountEntityCollector) emitIdentityStoreAccountsAndMemberships(
 		account.MiddleName = user.MiddleName
 		account.LastName = user.FamilyName
 		account.Description = user.UserID
+		account.AccountType = types.AccountTypeUser
 		account.Enabled = user.Active
 		if !user.CreatedAt.IsZero() {
 			account.CreatedAt = &user.CreatedAt
@@ -265,6 +285,39 @@ func (c *AWSAccountEntityCollector) emitIdentityStoreAccountsAndMemberships(
 	return nil
 }
 
+func (c *AWSAccountEntityCollector) emitServicePrincipalAccounts(
+	ctx context.Context,
+	accountsEmitted *int,
+) error {
+	roleEnum := c.client.IAMRoleEnumerator(ctx)
+	if err := enumerators.ForEach(roleEnum, func(role api.IAMRole) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		if len(role.ServicePrincipals) == 0 {
+			return nil
+		}
+
+		account := entities.NewAccount()
+		account.AccountRef = role.RoleID
+		account.Name = role.RoleName
+		account.Description = role.Description
+		account.AccountType = types.AccountTypeServicePrincipal
+		account.Enabled = true
+
+		if err := c.Emit(ctx, account); err != nil {
+			return fmt.Errorf("emit IAM service principal %s: %w", role.RoleID, err)
+		}
+		(*accountsEmitted)++
+		return nil
+	}); err != nil {
+		return fmt.Errorf("enumerate IAM roles for service principals: %w", err)
+	}
+
+	return nil
+}
+
 func (c *AWSAccountEntityCollector) emitManagementAccount(ctx context.Context, accountsEmitted *int) error {
 	organization, err := c.client.DescribeOrganization(ctx)
 	if err != nil {
@@ -276,6 +329,8 @@ func (c *AWSAccountEntityCollector) emitManagementAccount(ctx context.Context, a
 	account.Name = organization.MasterAccountID
 	account.DisplayName = organization.MasterAccountEmail
 	account.Description = organization.MasterAccountArn
+	account.AccountType = types.AccountTypeRoot
+	account.Enabled = true
 	if organization.MasterAccountEmail != "" {
 		account.PrimaryEmail = &types.Email{Address: organization.MasterAccountEmail}
 	}

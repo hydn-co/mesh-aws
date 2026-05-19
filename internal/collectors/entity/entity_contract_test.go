@@ -14,6 +14,7 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/stretchr/testify/require"
 )
@@ -112,6 +113,16 @@ func (fakeAWSContractClient) DescribeOrganization(_ context.Context) (*api.Organ
 	}, nil
 }
 
+func (fakeAWSContractClient) ListAccessKeys(_ context.Context, userName string) ([]api.IAMAccessKey, error) {
+	if userName == "alice" {
+		return []api.IAMAccessKey{{
+			AccessKeyID: "AKIAIOSFODNN7EXAMPLE",
+			Status:      "Active",
+		}}, nil
+	}
+	return []api.IAMAccessKey{}, nil
+}
+
 func (fakeAWSContractClient) IAMGroupEnumerator(_ context.Context) enumerators.Enumerator[api.IAMGroup] {
 	return sliceEnumerator([]api.IAMGroup{{
 		GroupID:    "iam-group-1",
@@ -123,9 +134,14 @@ func (fakeAWSContractClient) IAMGroupEnumerator(_ context.Context) enumerators.E
 
 func (fakeAWSContractClient) IAMRoleEnumerator(_ context.Context) enumerators.Enumerator[api.IAMRole] {
 	return sliceEnumerator([]api.IAMRole{{
-		RoleID:      "role-1",
-		RoleName:    "admins",
-		Description: "Admins role",
+		RoleID:            "role-1",
+		RoleName:          "admins",
+		Description:       "Admins role",
+		ServicePrincipals: []string{"lambda.amazonaws.com"},
+	}, {
+		RoleID:      "role-2",
+		RoleName:    "human-assumable",
+		Description: "Human assumable role",
 	}})
 }
 
@@ -190,6 +206,26 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenAccountCollectorRunsWithInjectedCl
 		&entities.Account{},
 		&entities.GroupMember{},
 	}, (&options.AWSAccountEntityCollectorOptions{}).GetSpaces())
+
+	servicePrincipalCount := 0
+	humanAssumableRoleCount := 0
+	for _, emitted := range emitter.emitted {
+		account, ok := emitted.(*entities.Account)
+		if !ok {
+			continue
+		}
+		if account.AccountRef == "role-1" {
+			require.Equal(t, types.AccountTypeServicePrincipal, account.AccountType)
+			require.True(t, account.Enabled)
+			servicePrincipalCount++
+		}
+		if account.AccountRef == "role-2" {
+			humanAssumableRoleCount++
+		}
+	}
+
+	require.Equal(t, 1, servicePrincipalCount)
+	require.Zero(t, humanAssumableRoleCount)
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenGroupCollectorRunsWithInjectedClient(t *testing.T) {

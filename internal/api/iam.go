@@ -2,8 +2,11 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -29,9 +32,10 @@ type IAMGroup struct {
 
 // IAMRole represents a single IAM role.
 type IAMRole struct {
-	RoleID      string
-	RoleName    string
-	Description string
+	RoleID            string
+	RoleName          string
+	Description       string
+	ServicePrincipals []string
 }
 
 // IAMPolicy represents a single IAM managed policy.
@@ -144,9 +148,145 @@ type listRolesResp struct {
 }
 
 type iamRoleXML struct {
-	RoleID      string `xml:"RoleId"`
-	RoleName    string `xml:"RoleName"`
-	Description string `xml:"Description"`
+	RoleID                   string `xml:"RoleId"`
+	RoleName                 string `xml:"RoleName"`
+	Description              string `xml:"Description"`
+	AssumeRolePolicyDocument string `xml:"AssumeRolePolicyDocument"`
+}
+
+func (r iamRoleXML) toIAMRole() IAMRole {
+	return IAMRole{
+		RoleID:            r.RoleID,
+		RoleName:          r.RoleName,
+		Description:       r.Description,
+		ServicePrincipals: extractServicePrincipals(r.AssumeRolePolicyDocument),
+	}
+}
+
+func extractServicePrincipals(encodedPolicy string) []string {
+	if encodedPolicy == "" {
+		return nil
+	}
+
+	decodedPolicy, err := url.QueryUnescape(encodedPolicy)
+	if err != nil {
+		decodedPolicy = encodedPolicy
+	}
+
+	var policyDoc map[string]any
+	if err := json.Unmarshal([]byte(decodedPolicy), &policyDoc); err != nil {
+		return nil
+	}
+
+	statements, ok := toObjectSlice(policyDoc["Statement"])
+	if !ok {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	principals := make([]string, 0)
+	for _, statement := range statements {
+		if !statementAllowsServiceAssumeRole(statement) {
+			continue
+		}
+
+		principalMap, ok := toObject(statement["Principal"])
+		if !ok {
+			continue
+		}
+
+		services, ok := toStringSlice(principalMap["Service"])
+		if !ok {
+			continue
+		}
+
+		for _, service := range services {
+			service = strings.TrimSpace(service)
+			if service == "" {
+				continue
+			}
+			if _, exists := seen[service]; exists {
+				continue
+			}
+			seen[service] = struct{}{}
+			principals = append(principals, service)
+		}
+	}
+
+	if len(principals) == 0 {
+		return nil
+	}
+
+	return principals
+}
+
+func statementAllowsServiceAssumeRole(statement map[string]any) bool {
+	effect, ok := statement["Effect"].(string)
+	if !ok || !strings.EqualFold(strings.TrimSpace(effect), "Allow") {
+		return false
+	}
+
+	actions, ok := toStringSlice(statement["Action"])
+	if !ok {
+		return false
+	}
+
+	for _, action := range actions {
+		if strings.EqualFold(strings.TrimSpace(action), "sts:AssumeRole") {
+			return true
+		}
+	}
+
+	return false
+}
+
+func toObject(value any) (map[string]any, bool) {
+	object, ok := value.(map[string]any)
+	return object, ok
+}
+
+func toObjectSlice(value any) ([]map[string]any, bool) {
+	switch typed := value.(type) {
+	case map[string]any:
+		return []map[string]any{typed}, true
+	case []any:
+		objects := make([]map[string]any, 0, len(typed))
+		for _, item := range typed {
+			object, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			objects = append(objects, object)
+		}
+		if len(objects) == 0 {
+			return nil, false
+		}
+		return objects, true
+	default:
+		return nil, false
+	}
+}
+
+func toStringSlice(value any) ([]string, bool) {
+	switch typed := value.(type) {
+	case string:
+		return []string{typed}, true
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			text, ok := item.(string)
+			if !ok {
+				continue
+			}
+			values = append(values, text)
+		}
+		if len(values) == 0 {
+			return nil, false
+		}
+		return values, true
+	default:
+		return nil, false
+	}
 }
 
 type listPoliciesResp struct {
@@ -359,7 +499,7 @@ func (c *Client) ListRoles(ctx context.Context, pathPrefix, marker string) ([]IA
 
 	roles := make([]IAMRole, len(resp.Result.Roles.Members))
 	for i, m := range resp.Result.Roles.Members {
-		roles[i] = IAMRole(m)
+		roles[i] = m.toIAMRole()
 	}
 	return roles, resp.Result.IsTruncated, resp.Result.Marker, nil
 }
