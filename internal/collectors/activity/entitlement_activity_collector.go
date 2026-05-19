@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strings"
 	"time"
 
 	"github.com/fgrzl/enumerators"
@@ -183,14 +182,11 @@ func mapEntitlementActivityEvent(
 	case "AttachGroupPolicy", "DetachGroupPolicy", "PutGroupPolicy", "DeleteGroupPolicy":
 		return mapIAMPrincipalPermissionEvent(event, detail, actor, context, "group")
 	case "UpdateAssumeRolePolicy":
-		roleName := firstNonEmpty(
-			firstRequestString(detail, "roleName", "RoleName"),
-			displayNameFromReference(firstRequestString(detail, "roleArn", "RoleArn")),
-		)
-		if roleName == "" {
+		roleRef := requestString(detail, "roleName")
+		if roleRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: roleName, Type: "role", DisplayName: displayNameFromReference(roleName)}
+		target := types.Target{Ref: roleRef, Type: "role", DisplayName: displayNameFromReference(roleRef)}
 		summary := fmt.Sprintf("IAM role trust policy updated for %q", target.DisplayName)
 		return newPolicyModifiedEvent(
 			event,
@@ -203,15 +199,12 @@ func mapEntitlementActivityEvent(
 			summary,
 		), true
 	case "CreatePolicyVersion":
-		policyRef := firstNonEmpty(
-			firstRequestString(detail, "policyArn", "PolicyArn"),
-			firstRequestString(detail, "policyName", "PolicyName"),
-		)
+		policyRef := requestString(detail, "policyArn")
 		if policyRef == "" {
 			return nil, false
 		}
 		target := types.Target{Ref: policyRef, Type: "policy", DisplayName: displayNameFromReference(policyRef)}
-		versionID := firstResponseString(detail, "versionId", "VersionId")
+		versionID := responseString(detail, "versionId")
 		summary := fmt.Sprintf("Managed policy %q version created", target.DisplayName)
 		modified := newPolicyModifiedEvent(
 			event,
@@ -226,10 +219,7 @@ func mapEntitlementActivityEvent(
 		modified.NewVersion = versionID
 		return modified, true
 	case "UpdatePermissionSet":
-		permissionSetRef := firstNonEmpty(
-			firstRequestString(detail, "permissionSetName", "PermissionSetName"),
-			displayNameFromReference(firstRequestString(detail, "permissionSetArn", "PermissionSetArn")),
-		)
+		permissionSetRef := requestString(detail, "permissionSetArn")
 		if permissionSetRef == "" {
 			return nil, false
 		}
@@ -250,15 +240,8 @@ func mapEntitlementActivityEvent(
 			summary,
 		), true
 	case "AttachManagedPolicyToPermissionSet", "DetachManagedPolicyFromPermissionSet":
-		permissionSetRef := firstNonEmpty(
-			firstRequestString(detail, "permissionSetArn", "PermissionSetArn"),
-			firstRequestString(detail, "permissionSetName", "PermissionSetName"),
-		)
-		policyRef := firstNonEmpty(
-			firstRequestString(detail, "policyArn", "PolicyArn"),
-			firstRequestString(detail, "managedPolicyArn", "ManagedPolicyArn"),
-			firstRequestString(detail, "policyName", "PolicyName"),
-		)
+		permissionSetRef := requestString(detail, "permissionSetArn")
+		policyRef := requestString(detail, "managedPolicyArn")
 		if permissionSetRef == "" || policyRef == "" {
 			return nil, false
 		}
@@ -279,7 +262,6 @@ func mapEntitlementActivityEvent(
 				permissionName,
 				"permission_set",
 				grantType,
-				permissionIsPrivileged(permissionName),
 			), true
 		}
 		return newPermissionRevokedEvent(
@@ -291,13 +273,9 @@ func mapEntitlementActivityEvent(
 			permissionName,
 			"permission_set",
 			"managed_policy_detached",
-			permissionIsPrivileged(permissionName),
 		), true
 	case "PutInlinePolicyToPermissionSet", "DeleteInlinePolicyFromPermissionSet":
-		permissionSetRef := firstNonEmpty(
-			firstRequestString(detail, "permissionSetArn", "PermissionSetArn"),
-			firstRequestString(detail, "permissionSetName", "PermissionSetName"),
-		)
+		permissionSetRef := requestString(detail, "permissionSetArn")
 		if permissionSetRef == "" {
 			return nil, false
 		}
@@ -338,82 +316,74 @@ func mapIAMPrincipalPermissionEvent(
 		"account": "userName",
 		"group":   "groupName",
 	}[targetType]
-	principalIDKey := map[string]string{
-		"role":    "roleId",
-		"account": "userId",
-		"group":   "groupId",
-	}[targetType]
-	principalRef := firstNonEmpty(
-		firstRequestString(detail, principalNameKey, strings.ToUpper(principalNameKey[:1])+principalNameKey[1:]),
-		firstRequestString(detail, principalIDKey, strings.ToUpper(principalIDKey[:1])+principalIDKey[1:]),
-	)
+	principalRef := requestString(detail, principalNameKey)
 	if principalRef == "" {
 		return nil, false
 	}
 
 	target := types.Target{Ref: principalRef, Type: targetType, DisplayName: displayNameFromReference(principalRef)}
-	policyRef := firstNonEmpty(
-		firstRequestString(detail, "policyArn", "PolicyArn"),
-		firstRequestString(detail, "policyName", "PolicyName"),
-	)
-	if policyRef == "" {
-		return nil, false
-	}
-	permissionName := displayNameFromReference(policyRef)
 	permissionScope := targetType
-	grantType := "attached"
-	if strings.HasPrefix(event.EventName, "Put") {
-		grantType = "inline"
-	}
 
 	switch event.EventName {
 	case "AttachRolePolicy", "AttachUserPolicy", "AttachGroupPolicy":
+		policyRef := requestString(detail, "policyArn")
+		if policyRef == "" {
+			return nil, false
+		}
 		return newPermissionGrantedEvent(
 			event,
 			actor,
 			context,
 			target,
 			policyRef,
-			permissionName,
+			displayNameFromReference(policyRef),
 			permissionScope,
-			grantType,
-			permissionIsPrivileged(permissionName),
+			"attached",
 		), true
 	case "DetachRolePolicy", "DetachUserPolicy", "DetachGroupPolicy":
+		policyRef := requestString(detail, "policyArn")
+		if policyRef == "" {
+			return nil, false
+		}
 		return newPermissionRevokedEvent(
 			event,
 			actor,
 			context,
 			target,
 			policyRef,
-			permissionName,
+			displayNameFromReference(policyRef),
 			permissionScope,
 			"detached",
-			permissionIsPrivileged(permissionName),
 		), true
 	case "PutRolePolicy", "PutUserPolicy", "PutGroupPolicy":
+		policyRef := requestString(detail, "policyName")
+		if policyRef == "" {
+			return nil, false
+		}
 		return newPermissionGrantedEvent(
 			event,
 			actor,
 			context,
 			target,
 			policyRef,
-			permissionName,
+			policyRef,
 			permissionScope,
 			"inline",
-			permissionIsPrivileged(permissionName),
 		), true
 	case "DeleteRolePolicy", "DeleteUserPolicy", "DeleteGroupPolicy":
+		policyRef := requestString(detail, "policyName")
+		if policyRef == "" {
+			return nil, false
+		}
 		return newPermissionRevokedEvent(
 			event,
 			actor,
 			context,
 			target,
 			policyRef,
-			permissionName,
+			policyRef,
 			permissionScope,
 			"inline policy deleted",
-			permissionIsPrivileged(permissionName),
 		), true
 	default:
 		return nil, false
@@ -429,7 +399,6 @@ func newPermissionGrantedEvent(
 	permissionName string,
 	permissionScope string,
 	grantType string,
-	privileged bool,
 ) *events.PermissionGranted {
 	return &events.PermissionGranted{
 		EventRef:        event.EventID,
@@ -442,7 +411,6 @@ func newPermissionGrantedEvent(
 		PermissionName:  permissionName,
 		PermissionScope: permissionScope,
 		GrantType:       grantType,
-		Privileged:      privileged,
 	}
 }
 
@@ -455,7 +423,6 @@ func newPermissionRevokedEvent(
 	permissionName string,
 	permissionScope string,
 	revocationReason string,
-	privileged bool,
 ) *events.PermissionRevoked {
 	return &events.PermissionRevoked{
 		EventRef:         event.EventID,
@@ -468,7 +435,6 @@ func newPermissionRevokedEvent(
 		PermissionName:   permissionName,
 		PermissionScope:  permissionScope,
 		RevocationReason: revocationReason,
-		WasPrivileged:    privileged,
 	}
 }
 
@@ -496,12 +462,6 @@ func newPolicyModifiedEvent(
 		ChangedProperties: changedProperties,
 		ChangeSummary:     changeSummary,
 	}
-}
-
-func permissionIsPrivileged(permissionName string) bool {
-	lower := strings.ToLower(permissionName)
-	return strings.Contains(lower, "admin") || strings.Contains(lower, "fullaccess") ||
-		strings.Contains(lower, "poweruser")
 }
 
 func entitlementResumeCursor(payload any) (*time.Time, string) {

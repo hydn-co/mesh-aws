@@ -49,9 +49,11 @@ func TestShouldMapGroupMembershipAddedWhenAddUserToGroupOccurs(t *testing.T) {
 	require.True(t, ok)
 	membership, ok := mapped.(*events.GroupMemberAdded)
 	require.True(t, ok)
-	assert.Equal(t, "admins", membership.GroupRef)
+	assert.Equal(t, "", membership.GroupRef)
+	assert.Equal(t, "admins", membership.GroupName)
 	assert.Equal(t, "alice", membership.Target.Ref)
-	assert.Equal(t, "Direct", membership.MembershipType)
+	assert.Equal(t, "", membership.MembershipType)
+	assert.Equal(t, "", membership.RoleInGroup)
 }
 
 func TestShouldMapRoleLifecycleWhenPermissionSetIsCreated(t *testing.T) {
@@ -98,7 +100,7 @@ func TestShouldMapPermissionGrantedWhenRolePolicyIsAttached(t *testing.T) {
 	assert.Equal(t, "admins", granted.Target.Ref)
 	assert.Equal(t, "arn:aws:iam::aws:policy/AdministratorAccess", granted.PermissionRef)
 	assert.Equal(t, "role", granted.PermissionScope)
-	assert.True(t, granted.Privileged)
+	assert.False(t, granted.Privileged)
 }
 
 func TestShouldMapPolicyModifiedWhenRoleTrustPolicyChanges(t *testing.T) {

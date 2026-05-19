@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/fgrzl/enumerators"
@@ -163,7 +164,10 @@ func mapLoginActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEvent
 			}, true
 		}
 
-		failureReason := firstNonEmpty(detail.ErrorMessage, detail.ErrorCode, "console login failed")
+		failureReason := strings.TrimSpace(detail.ErrorMessage)
+		if failureReason == "" {
+			failureReason = strings.TrimSpace(detail.ErrorCode)
+		}
 		return &events.LoginFailed{
 			EventRef:      event.EventID,
 			Timestamp:     event.EventTime,
@@ -187,7 +191,13 @@ func mapLoginActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEvent
 		if status != "Failure" && detail.ErrorCode == "" && detail.ErrorMessage == "" {
 			return nil, false
 		}
-		failureReason := firstNonEmpty(detail.ErrorMessage, detail.ErrorCode, status, "credential verification failed")
+		failureReason := strings.TrimSpace(detail.ErrorMessage)
+		if failureReason == "" {
+			failureReason = strings.TrimSpace(detail.ErrorCode)
+		}
+		if failureReason == "" {
+			failureReason = status
+		}
 		return &events.LoginFailed{
 			EventRef:      event.EventID,
 			Timestamp:     event.EventTime,

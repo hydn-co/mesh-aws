@@ -153,15 +153,11 @@ func mapAccountActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEve
 
 	switch event.EventName {
 	case "CreateUser":
-		accountName := firstNonEmpty(
-			firstRequestString(detail, "userName", "UserName"),
-			firstRequestString(detail, "displayName", "DisplayName"),
-			displayNameFromReference(firstRequestString(detail, "userId", "UserId")),
-		)
-		if accountName == "" {
+		accountRef := requestString(detail, "userName")
+		if accountRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: accountName, Type: "account", DisplayName: displayNameFromReference(accountName)}
+		target := types.Target{Ref: accountRef, Type: "account", DisplayName: displayNameFromReference(accountRef)}
 		return &events.AccountCreated{
 			EventRef:        event.EventID,
 			Timestamp:       event.EventTime,
@@ -173,34 +169,26 @@ func mapAccountActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEve
 			SourceDirectory: "IAM",
 		}, true
 	case "DeleteUser":
-		accountName := firstNonEmpty(
-			firstRequestString(detail, "userName", "UserName"),
-			firstRequestString(detail, "displayName", "DisplayName"),
-		)
-		if accountName == "" {
+		accountRef := requestString(detail, "userName")
+		if accountRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: accountName, Type: "account", DisplayName: displayNameFromReference(accountName)}
+		target := types.Target{Ref: accountRef, Type: "account", DisplayName: displayNameFromReference(accountRef)}
 		return &events.AccountDeleted{
-			EventRef:         event.EventID,
-			Timestamp:        event.EventTime,
-			Actor:            actor,
-			Target:           target,
-			Context:          context,
-			Outcome:          types.EventOutcome{Action: "delete", Result: "success"},
-			DeletionMethod:   "deleted",
-			PreviousStatus:   "active",
-			RecoveryPossible: false,
+			EventRef:       event.EventID,
+			Timestamp:      event.EventTime,
+			Actor:          actor,
+			Target:         target,
+			Context:        context,
+			Outcome:        types.EventOutcome{Action: "delete", Result: "success"},
+			DeletionMethod: "deleted",
 		}, true
 	case "CreateAccount":
-		accountName := firstNonEmpty(
-			firstRequestString(detail, "accountName", "AccountName"),
-			firstRequestString(detail, "email", "Email"),
-		)
-		if accountName == "" {
+		accountRef := requestString(detail, "accountName")
+		if accountRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: accountName, Type: "account", DisplayName: displayNameFromReference(accountName)}
+		target := types.Target{Ref: accountRef, Type: "account", DisplayName: displayNameFromReference(accountRef)}
 		return &events.AccountCreated{
 			EventRef:        event.EventID,
 			Timestamp:       event.EventTime,
@@ -212,24 +200,19 @@ func mapAccountActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEve
 			SourceDirectory: "Organizations",
 		}, true
 	case "CloseAccount":
-		accountRef := firstNonEmpty(
-			firstRequestString(detail, "accountId", "AccountId"),
-			firstRequestString(detail, "accountName", "AccountName"),
-		)
+		accountRef := requestString(detail, "accountId")
 		if accountRef == "" {
 			return nil, false
 		}
 		target := types.Target{Ref: accountRef, Type: "account", DisplayName: displayNameFromReference(accountRef)}
 		return &events.AccountDeleted{
-			EventRef:         event.EventID,
-			Timestamp:        event.EventTime,
-			Actor:            actor,
-			Target:           target,
-			Context:          context,
-			Outcome:          types.EventOutcome{Action: "delete", Result: "success"},
-			DeletionMethod:   "closed",
-			PreviousStatus:   "active",
-			RecoveryPossible: false,
+			EventRef:       event.EventID,
+			Timestamp:      event.EventTime,
+			Actor:          actor,
+			Target:         target,
+			Context:        context,
+			Outcome:        types.EventOutcome{Action: "delete", Result: "success"},
+			DeletionMethod: "closed",
 		}, true
 	default:
 		return nil, false

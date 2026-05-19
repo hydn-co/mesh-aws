@@ -39,6 +39,7 @@ func TestShouldMapCognitoLifecycleEventsWhenAdminAndGroupChangesOccur(t *testing
 				require.True(t, ok)
 				assert.Equal(t, "jane.doe", deleted.Target.Ref)
 				assert.Equal(t, "admin_deleted", deleted.DeletionMethod)
+				assert.Equal(t, "", deleted.PreviousStatus)
 			},
 		},
 		{

@@ -211,15 +211,13 @@ func mapCognitoUserPoolAdminActivityEvent(
 		}
 		target := cognitoAccountTarget(username)
 		return &events.AccountDeleted{
-			EventRef:         event.EventID,
-			Timestamp:        event.EventTime,
-			Actor:            actor,
-			Target:           target,
-			Context:          context,
-			Outcome:          types.EventOutcome{Action: "delete", Result: "success"},
-			DeletionMethod:   "admin_deleted",
-			PreviousStatus:   "active",
-			RecoveryPossible: false,
+			EventRef:       event.EventID,
+			Timestamp:      event.EventTime,
+			Actor:          actor,
+			Target:         target,
+			Context:        context,
+			Outcome:        types.EventOutcome{Action: "delete", Result: "success"},
+			DeletionMethod: "admin_deleted",
 		}, true
 	case "AdminConfirmSignUp":
 		username := cognitoUsername(detail)
@@ -292,7 +290,7 @@ func mapCognitoUserPoolAdminActivityEvent(
 		if username == "" {
 			return nil, false
 		}
-		permanent := requestBool(detail, "permanent", "Permanent")
+		permanent := requestBool(detail, "permanent")
 		target := cognitoAccountTarget(username)
 		return newCognitoPasswordResetEvent(
 			event,
@@ -313,17 +311,15 @@ func mapCognitoUserPoolAdminActivityEvent(
 		}
 		target := cognitoAccountTarget(username)
 		return &events.GroupMemberAdded{
-			EventRef:       event.EventID,
-			Timestamp:      event.EventTime,
-			Actor:          actor,
-			Target:         target,
-			Context:        context,
-			Outcome:        types.EventOutcome{Action: "add", Result: "success"},
-			GroupRef:       groupName,
-			GroupName:      groupName,
-			GroupType:      "Cognito User Pool",
-			MembershipType: "Direct",
-			RoleInGroup:    "Member",
+			EventRef:  event.EventID,
+			Timestamp: event.EventTime,
+			Actor:     actor,
+			Target:    target,
+			Context:   context,
+			Outcome:   types.EventOutcome{Action: "add", Result: "success"},
+			GroupRef:  groupName,
+			GroupName: groupName,
+			GroupType: "Cognito User Pool",
 		}, true
 	case "AdminRemoveUserFromGroup":
 		username := cognitoUsername(detail)
@@ -333,19 +329,15 @@ func mapCognitoUserPoolAdminActivityEvent(
 		}
 		target := cognitoAccountTarget(username)
 		return &events.GroupMemberRemoved{
-			EventRef:           event.EventID,
-			Timestamp:          event.EventTime,
-			Actor:              actor,
-			Target:             target,
-			Context:            context,
-			Outcome:            types.EventOutcome{Action: "remove", Result: "success"},
-			GroupRef:           groupName,
-			GroupName:          groupName,
-			GroupType:          "Cognito User Pool",
-			RemovalReason:      "admin_removed",
-			MembershipDuration: 0,
-			WasOwner:           false,
-			RemainingOwners:    0,
+			EventRef:  event.EventID,
+			Timestamp: event.EventTime,
+			Actor:     actor,
+			Target:    target,
+			Context:   context,
+			Outcome:   types.EventOutcome{Action: "remove", Result: "success"},
+			GroupRef:  groupName,
+			GroupName: groupName,
+			GroupType: "Cognito User Pool",
 		}, true
 	case "CreateGroup":
 		groupName := cognitoGroupName(detail)
@@ -446,11 +438,8 @@ func mapCognitoUserPoolAdminActivityEvent(
 		if username == "" {
 			return nil, false
 		}
-		eventID := firstNonEmpty(
-			firstRequestString(detail, "eventId", "EventId"),
-			firstRequestString(detail, "eventID", "EventID"),
-		)
-		feedbackValue := firstNonEmpty(firstRequestString(detail, "feedbackValue", "FeedbackValue"), "valid")
+		eventID := requestString(detail, "eventId")
+		feedbackValue := requestString(detail, "feedbackValue")
 		target := cognitoAccountTarget(username)
 		return newCognitoAdministrativeActionEvent(
 			event,
@@ -471,14 +460,11 @@ func mapCognitoUserPoolAdminActivityEvent(
 		), true
 	case "AdminUpdateDeviceStatus":
 		username := cognitoUsername(detail)
-		deviceKey := firstRequestString(detail, "deviceKey", "DeviceKey")
+		deviceKey := requestString(detail, "deviceKey")
 		if username == "" || deviceKey == "" {
 			return nil, false
 		}
-		status := firstNonEmpty(
-			firstRequestString(detail, "deviceRememberedStatus", "DeviceRememberedStatus"),
-			"updated",
-		)
+		status := requestString(detail, "deviceRememberedStatus")
 		target := cognitoAccountTarget(username)
 		return newCognitoAdministrativeActionEvent(
 			event,
@@ -504,7 +490,7 @@ func mapCognitoUserPoolAdminActivityEvent(
 		), true
 	case "AdminForgetDevice":
 		username := cognitoUsername(detail)
-		deviceKey := firstRequestString(detail, "deviceKey", "DeviceKey")
+		deviceKey := requestString(detail, "deviceKey")
 		if username == "" || deviceKey == "" {
 			return nil, false
 		}
@@ -644,17 +630,11 @@ func cognitoUserPoolResumeCursor(payload any) (*time.Time, string) {
 }
 
 func cognitoUsername(detail *awsCloudTrailEventDetail) string {
-	return firstNonEmpty(
-		firstRequestString(detail, "username", "Username", "userName", "UserName"),
-		firstResponseString(detail, "username", "Username", "userName", "UserName"),
-	)
+	return requestString(detail, "username")
 }
 
 func cognitoGroupName(detail *awsCloudTrailEventDetail) string {
-	return firstNonEmpty(
-		firstRequestString(detail, "groupName", "GroupName"),
-		firstResponseString(detail, "groupName", "GroupName"),
-	)
+	return requestString(detail, "groupName")
 }
 
 func cognitoAccountTarget(username string) types.Target {
@@ -728,8 +708,8 @@ func cognitoMFAPreference(detail *awsCloudTrailEventDetail) (types.MultiFactorKi
 }
 
 func requestObject(detail *awsCloudTrailEventDetail, key string) map[string]any {
-	raw, ok := detail.RequestParameters[key]
-	if !ok || raw == nil {
+	raw, ok := lookupValue(detail.RequestParameters, key)
+	if !ok {
 		return nil
 	}
 	object, ok := raw.(map[string]any)
@@ -744,26 +724,12 @@ func requestObjectString(detail *awsCloudTrailEventDetail, objectKey string, fie
 }
 
 func requestObjectStringFromMap(values map[string]any, field string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	raw, ok := values[field]
-	if !ok || raw == nil {
-		return ""
-	}
-	stringValue, ok := raw.(string)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(stringValue)
+	return lookupString(values, field)
 }
 
 func requestObjectBool(values map[string]any, field string) bool {
-	if len(values) == 0 {
-		return false
-	}
-	raw, ok := values[field]
-	if !ok || raw == nil {
+	raw, ok := lookupValue(values, field)
+	if !ok {
 		return false
 	}
 	switch value := raw.(type) {
@@ -803,23 +769,21 @@ func newCognitoMultiFactorUpdatedEvent(
 	}
 }
 
-func requestBool(detail *awsCloudTrailEventDetail, keys ...string) bool {
-	for _, key := range keys {
-		raw, ok := detail.RequestParameters[key]
-		if !ok || raw == nil {
-			continue
+func requestBool(detail *awsCloudTrailEventDetail, key string) bool {
+	raw, ok := lookupValue(detail.RequestParameters, key)
+	if !ok {
+		return false
+	}
+	switch value := raw.(type) {
+	case bool:
+		return value
+	case string:
+		parsed, err := strconv.ParseBool(value)
+		if err == nil {
+			return parsed
 		}
-		switch value := raw.(type) {
-		case bool:
-			return value
-		case string:
-			parsed, err := strconv.ParseBool(value)
-			if err == nil {
-				return parsed
-			}
-		case float64:
-			return value != 0
-		}
+	case float64:
+		return value != 0
 	}
 	return false
 }

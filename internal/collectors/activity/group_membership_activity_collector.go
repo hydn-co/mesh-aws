@@ -157,54 +157,41 @@ func mapGroupMembershipActivityEvent(
 		return nil, false
 	}
 
-	groupName := firstNonEmpty(
-		firstRequestString(detail, "groupName", "GroupName"),
-		firstRequestString(detail, "groupId", "GroupId"),
-		firstRequestString(detail, "displayName", "DisplayName"),
-	)
-	memberName := firstNonEmpty(
-		firstRequestString(detail, "userName", "UserName"),
-		firstRequestString(detail, "memberId", "MemberId"),
-		firstRequestString(detail, "memberUserId", "MemberUserId", "memberUserID", "MemberUserID"),
-	)
-	if groupName == "" || memberName == "" {
+	groupRef := requestString(detail, "groupId")
+	groupName := requestString(detail, "groupName")
+	memberRef := requestString(detail, "userName")
+	if memberRef == "" {
 		return nil, false
 	}
 
 	groupType := "IAM"
-	target := types.Target{Ref: memberName, Type: "account", DisplayName: displayNameFromReference(memberName)}
+	target := types.Target{Ref: memberRef, Type: "account", DisplayName: displayNameFromReference(memberRef)}
 	context := activityContext(detail)
 
 	switch event.EventName {
 	case "AddUserToGroup":
 		return &events.GroupMemberAdded{
-			EventRef:       event.EventID,
-			Timestamp:      event.EventTime,
-			Actor:          actor,
-			Target:         target,
-			Context:        context,
-			Outcome:        types.EventOutcome{Action: "add", Result: "success"},
-			GroupRef:       groupName,
-			GroupName:      groupName,
-			GroupType:      groupType,
-			MembershipType: "Direct",
-			RoleInGroup:    "Member",
+			EventRef:  event.EventID,
+			Timestamp: event.EventTime,
+			Actor:     actor,
+			Target:    target,
+			Context:   context,
+			Outcome:   types.EventOutcome{Action: "add", Result: "success"},
+			GroupRef:  groupRef,
+			GroupName: groupName,
+			GroupType: groupType,
 		}, true
 	case "RemoveUserFromGroup":
 		return &events.GroupMemberRemoved{
-			EventRef:           event.EventID,
-			Timestamp:          event.EventTime,
-			Actor:              actor,
-			Target:             target,
-			Context:            context,
-			Outcome:            types.EventOutcome{Action: "remove", Result: "success"},
-			GroupRef:           groupName,
-			GroupName:          groupName,
-			GroupType:          groupType,
-			RemovalReason:      "removed",
-			MembershipDuration: 0,
-			WasOwner:           false,
-			RemainingOwners:    0,
+			EventRef:  event.EventID,
+			Timestamp: event.EventTime,
+			Actor:     actor,
+			Target:    target,
+			Context:   context,
+			Outcome:   types.EventOutcome{Action: "remove", Result: "success"},
+			GroupRef:  groupRef,
+			GroupName: groupName,
+			GroupType: groupType,
 		}, true
 	default:
 		return nil, false

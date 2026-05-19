@@ -48,21 +48,29 @@ func parseCloudTrailEventDetail(event api.CloudTrailEvent) (*awsCloudTrailEventD
 }
 
 func activityActor(event api.CloudTrailEvent, detail *awsCloudTrailEventDetail) (types.Actor, bool) {
-	displayName := firstNonEmpty(
-		lookupString(detail.AdditionalEventData, "UserName"),
-		strings.TrimSpace(detail.UserIdentity.UserName),
-		strings.TrimSpace(event.Username),
-	)
-	ref := firstNonEmpty(
-		userIDFromOnBehalfOf(detail.UserIdentity.OnBehalfOf),
-		strings.TrimSpace(detail.UserIdentity.UserName),
-		lookupString(detail.AdditionalEventData, "UserName"),
-		strings.TrimSpace(event.Username),
-		strings.TrimSpace(detail.UserIdentity.ARN),
-		strings.TrimSpace(detail.UserIdentity.AccountID),
-	)
+	ref := userIDFromOnBehalfOf(detail.UserIdentity.OnBehalfOf)
+	if ref == "" {
+		ref = strings.TrimSpace(detail.UserIdentity.UserName)
+	}
+	if ref == "" {
+		ref = strings.TrimSpace(detail.UserIdentity.ARN)
+	}
+	if ref == "" {
+		ref = strings.TrimSpace(detail.UserIdentity.AccountID)
+	}
+	if ref == "" {
+		ref = strings.TrimSpace(event.Username)
+	}
 	if ref == "" {
 		return types.Actor{}, false
+	}
+
+	displayName := strings.TrimSpace(detail.UserIdentity.UserName)
+	if displayName == "" {
+		displayName = lookupString(detail.AdditionalEventData, "UserName")
+	}
+	if displayName == "" {
+		displayName = strings.TrimSpace(event.Username)
 	}
 	if displayName == "" {
 		displayName = ref
@@ -135,22 +143,6 @@ func responseString(detail *awsCloudTrailEventDetail, key string) string {
 	return strings.TrimSpace(lookupString(detail.ResponseElements, key))
 }
 
-func firstRequestString(detail *awsCloudTrailEventDetail, keys ...string) string {
-	values := make([]string, 0, len(keys))
-	for _, key := range keys {
-		values = append(values, requestString(detail, key))
-	}
-	return firstNonEmpty(values...)
-}
-
-func firstResponseString(detail *awsCloudTrailEventDetail, keys ...string) string {
-	values := make([]string, 0, len(keys))
-	for _, key := range keys {
-		values = append(values, responseString(detail, key))
-	}
-	return firstNonEmpty(values...)
-}
-
 func displayNameFromReference(value string) string {
 	trimmedValue := strings.TrimSpace(value)
 	if trimmedValue == "" {
@@ -167,11 +159,8 @@ func displayNameFromReference(value string) string {
 }
 
 func lookupString(values map[string]any, key string) string {
-	if len(values) == 0 {
-		return ""
-	}
-	raw, ok := values[key]
-	if !ok || raw == nil {
+	raw, ok := lookupValue(values, key)
+	if !ok {
 		return ""
 	}
 	stringValue, ok := raw.(string)
@@ -181,19 +170,29 @@ func lookupString(values map[string]any, key string) string {
 	return strings.TrimSpace(stringValue)
 }
 
+func lookupValue(values map[string]any, key string) (any, bool) {
+	if len(values) == 0 {
+		return nil, false
+	}
+	raw, ok := values[key]
+	if ok && raw != nil {
+		return raw, true
+	}
+	normalizedKey := strings.ToLower(strings.TrimSpace(key))
+	for currentKey, value := range values {
+		if value == nil {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(currentKey)) == normalizedKey {
+			return value, true
+		}
+	}
+	return nil, false
+}
+
 func userIDFromOnBehalfOf(subject *awsCloudTrailOnBehalfOf) string {
 	if subject == nil {
 		return ""
 	}
 	return strings.TrimSpace(subject.UserID)
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		trimmedValue := strings.TrimSpace(value)
-		if trimmedValue != "" {
-			return trimmedValue
-		}
-	}
-	return ""
 }

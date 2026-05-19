@@ -153,10 +153,7 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 
 	switch event.EventName {
 	case "CreateRole":
-		roleName := firstNonEmpty(
-			firstRequestString(detail, "roleName", "RoleName"),
-			firstResponseString(detail, "roleName", "RoleName"),
-		)
+		roleName := requestString(detail, "roleName")
 		if roleName == "" {
 			return nil, false
 		}
@@ -176,10 +173,7 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 			RelatedTargets: []types.Target{target},
 		}, true
 	case "DeleteRole":
-		roleName := firstNonEmpty(
-			firstRequestString(detail, "roleName", "RoleName"),
-			firstResponseString(detail, "roleName", "RoleName"),
-		)
+		roleName := requestString(detail, "roleName")
 		if roleName == "" {
 			return nil, false
 		}
@@ -199,14 +193,11 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 			RelatedTargets: []types.Target{target},
 		}, true
 	case "CreatePolicy":
-		policyName := firstNonEmpty(
-			firstRequestString(detail, "policyName", "PolicyName"),
-			displayNameFromReference(firstRequestString(detail, "policyArn", "PolicyArn")),
-		)
-		if policyName == "" {
+		policyRef := requestString(detail, "policyName")
+		if policyRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: policyName, Type: "policy", DisplayName: displayNameFromReference(policyName)}
+		target := types.Target{Ref: policyRef, Type: "policy", DisplayName: displayNameFromReference(policyRef)}
 		summary := fmt.Sprintf("IAM policy %q created", target.DisplayName)
 		return &events.AdministrativeActionPerformed{
 			EventRef:       event.EventID,
@@ -222,14 +213,11 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 			RelatedTargets: []types.Target{target},
 		}, true
 	case "DeletePolicy":
-		policyName := firstNonEmpty(
-			firstRequestString(detail, "policyName", "PolicyName"),
-			displayNameFromReference(firstRequestString(detail, "policyArn", "PolicyArn")),
-		)
-		if policyName == "" {
+		policyRef := requestString(detail, "policyArn")
+		if policyRef == "" {
 			return nil, false
 		}
-		target := types.Target{Ref: policyName, Type: "policy", DisplayName: displayNameFromReference(policyName)}
+		target := types.Target{Ref: policyRef, Type: "policy", DisplayName: displayNameFromReference(policyRef)}
 		summary := fmt.Sprintf("IAM policy %q deleted", target.DisplayName)
 		return &events.AdministrativeActionPerformed{
 			EventRef:       event.EventID,
@@ -245,17 +233,14 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 			RelatedTargets: []types.Target{target},
 		}, true
 	case "CreatePermissionSet":
-		permissionSetName := firstNonEmpty(
-			firstRequestString(detail, "permissionSetName", "PermissionSetName"),
-			displayNameFromReference(firstRequestString(detail, "permissionSetArn", "PermissionSetArn")),
-		)
-		if permissionSetName == "" {
+		permissionSetRef := requestString(detail, "permissionSetName")
+		if permissionSetRef == "" {
 			return nil, false
 		}
 		target := types.Target{
-			Ref:         permissionSetName,
+			Ref:         permissionSetRef,
 			Type:        "permission_set",
-			DisplayName: displayNameFromReference(permissionSetName),
+			DisplayName: displayNameFromReference(permissionSetRef),
 		}
 		summary := fmt.Sprintf("AWS permission set %q created", target.DisplayName)
 		return &events.AdministrativeActionPerformed{
@@ -272,17 +257,14 @@ func mapRoleActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEventD
 			RelatedTargets: []types.Target{target},
 		}, true
 	case "DeletePermissionSet":
-		permissionSetName := firstNonEmpty(
-			firstRequestString(detail, "permissionSetName", "PermissionSetName"),
-			displayNameFromReference(firstRequestString(detail, "permissionSetArn", "PermissionSetArn")),
-		)
-		if permissionSetName == "" {
+		permissionSetRef := requestString(detail, "permissionSetArn")
+		if permissionSetRef == "" {
 			return nil, false
 		}
 		target := types.Target{
-			Ref:         permissionSetName,
+			Ref:         permissionSetRef,
 			Type:        "permission_set",
-			DisplayName: displayNameFromReference(permissionSetName),
+			DisplayName: displayNameFromReference(permissionSetRef),
 		}
 		summary := fmt.Sprintf("AWS permission set %q deleted", target.DisplayName)
 		return &events.AdministrativeActionPerformed{

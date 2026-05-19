@@ -153,12 +153,7 @@ func mapGroupActivityEvent(event api.CloudTrailEvent, detail *awsCloudTrailEvent
 		return nil, false
 	}
 
-	groupName := firstNonEmpty(
-		firstRequestString(detail, "groupName", "GroupName"),
-		firstRequestString(detail, "displayName", "DisplayName"),
-		firstResponseString(detail, "groupName", "GroupName"),
-		firstResponseString(detail, "displayName", "DisplayName"),
-	)
+	groupName := requestString(detail, "groupName")
 	if groupName == "" {
 		return nil, false
 	}
