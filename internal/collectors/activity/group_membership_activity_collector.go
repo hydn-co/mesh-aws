@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
@@ -88,43 +87,41 @@ func (c *AWSGroupMembershipActivityCollector) Start(ctx context.Context) error {
 		}
 	}
 
+	eventNames := []string{"AddUserToGroup", "RemoveUserFromGroup"}
+	cloudTrailEvents, err := collectMergedCloudTrailEvents(ctx, c.client, eventNames, startTime)
+	if err != nil {
+		return fmt.Errorf("collect group membership activity events: %w", err)
+	}
+	cloudTrailEvents = resumeFilteredCloudTrailEvents(cloudTrailEvents, startTime, lastEventRef)
+
 	emitted := 0
-	for _, eventName := range []string{"AddUserToGroup", "RemoveUserFromGroup"} {
-		eventEnum := c.client.CloudTrailEventEnumerator(ctx, eventName, startTime)
-		if err := enumerators.ForEach(eventEnum, func(event api.CloudTrailEvent) error {
-			if err := ctx.Err(); err != nil {
-				return err
-			}
-			if lastEventRef != "" && event.EventID == lastEventRef {
-				return nil
-			}
-			if event.CloudTrailEvent == "" {
-				return nil
-			}
-
-			detail, err := parseCloudTrailEventDetail(event)
-			if err != nil {
-				connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelError,
-					"failed to parse AWS group membership activity event JSON",
-					"event_name", event.EventName,
-					"event_id", event.EventID,
-					"error", err,
-				)
-				return err
-			}
-
-			activityEvent, ok := mapGroupMembershipActivityEvent(event, detail)
-			if !ok {
-				return nil
-			}
-			if err := c.Emit(ctx, activityEvent); err != nil {
-				return fmt.Errorf("emit group membership activity %T: %w", activityEvent, err)
-			}
-			emitted++
-			return nil
-		}); err != nil {
-			return fmt.Errorf("enumerate group membership activity events for %s: %w", eventName, err)
+	for _, event := range cloudTrailEvents {
+		if err := ctx.Err(); err != nil {
+			return err
 		}
+		if event.CloudTrailEvent == "" {
+			continue
+		}
+
+		detail, err := parseCloudTrailEventDetail(event)
+		if err != nil {
+			connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelError,
+				"failed to parse AWS group membership activity event JSON",
+				"event_name", event.EventName,
+				"event_id", event.EventID,
+				"error", err,
+			)
+			return err
+		}
+
+		activityEvent, ok := mapGroupMembershipActivityEvent(event, detail)
+		if !ok {
+			continue
+		}
+		if err := c.Emit(ctx, activityEvent); err != nil {
+			return fmt.Errorf("emit group membership activity %T: %w", activityEvent, err)
+		}
+		emitted++
 	}
 
 	connectorutil.LogFeature(

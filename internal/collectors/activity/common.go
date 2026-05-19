@@ -1,11 +1,14 @@
 package activity
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
@@ -129,6 +132,86 @@ func sessionResumeCursor(payload any) (*time.Time, string) {
 	default:
 		return nil, ""
 	}
+}
+
+func collectMergedCloudTrailEvents(
+	ctx context.Context,
+	client *api.Client,
+	eventNames []string,
+	startTime *time.Time,
+) ([]api.CloudTrailEvent, error) {
+	merged := make([]api.CloudTrailEvent, 0)
+	for _, eventName := range eventNames {
+		eventEnum := client.CloudTrailEventEnumerator(ctx, eventName, startTime)
+		if err := enumerators.ForEach(eventEnum, func(event api.CloudTrailEvent) error {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			merged = append(merged, event)
+			return nil
+		}); err != nil {
+			return nil, fmt.Errorf("enumerate CloudTrail events for %s: %w", eventName, err)
+		}
+	}
+
+	sortCloudTrailEvents(merged)
+
+	return merged, nil
+}
+
+func sortCloudTrailEvents(events []api.CloudTrailEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		left := events[i]
+		right := events[j]
+		if left.EventTime.Equal(right.EventTime) {
+			if left.EventID == right.EventID {
+				return left.EventName < right.EventName
+			}
+			return left.EventID < right.EventID
+		}
+		return left.EventTime.Before(right.EventTime)
+	})
+}
+
+func resumeFilteredCloudTrailEvents(
+	events []api.CloudTrailEvent,
+	resumeTime *time.Time,
+	lastEventRef string,
+) []api.CloudTrailEvent {
+	if resumeTime == nil {
+		return events
+	}
+
+	filtered := make([]api.CloudTrailEvent, 0, len(events))
+	resumeReached := lastEventRef == ""
+	for _, event := range events {
+		if event.EventTime.Before(*resumeTime) {
+			continue
+		}
+		if event.EventTime.After(*resumeTime) {
+			resumeReached = true
+			filtered = append(filtered, event)
+			continue
+		}
+		if resumeReached {
+			filtered = append(filtered, event)
+			continue
+		}
+		if event.EventID == lastEventRef {
+			resumeReached = true
+		}
+	}
+
+	if lastEventRef != "" && !resumeReached {
+		filtered = filtered[:0]
+		for _, event := range events {
+			if event.EventTime.After(*resumeTime) {
+				filtered = append(filtered, event)
+			}
+		}
+	}
+
+	return filtered
 }
 
 func responseStatus(detail *awsCloudTrailEventDetail, key string) string {

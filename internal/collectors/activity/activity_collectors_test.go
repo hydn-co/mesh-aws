@@ -126,3 +126,34 @@ func TestShouldMapLogoutWhenSessionTerminates(t *testing.T) {
 	assert.Equal(t, "logout", terminated.Reason)
 	assert.Equal(t, "success", terminated.Outcome.Result)
 }
+
+func TestShouldResumeMergedCloudTrailEventsGivenSavedEventRefAtSharedTimestamp(t *testing.T) {
+	resumeAt := time.Date(2026, 5, 14, 18, 3, 0, 0, time.UTC)
+	events := []api.CloudTrailEvent{
+		{EventID: "b", EventName: "DeleteUser", EventTime: resumeAt},
+		{EventID: "a", EventName: "CreateUser", EventTime: resumeAt},
+		{EventID: "c", EventName: "CloseAccount", EventTime: resumeAt.Add(time.Second)},
+	}
+
+	sortCloudTrailEvents(events)
+	filtered := resumeFilteredCloudTrailEvents(events, &resumeAt, "a")
+
+	require.Len(t, filtered, 2)
+	assert.Equal(t, "b", filtered[0].EventID)
+	assert.Equal(t, "c", filtered[1].EventID)
+}
+
+func TestShouldResumeAfterTimestampGivenSavedEventRefIsMissing(t *testing.T) {
+	resumeAt := time.Date(2026, 5, 14, 18, 3, 0, 0, time.UTC)
+	events := []api.CloudTrailEvent{
+		{EventID: "a", EventName: "CreateUser", EventTime: resumeAt},
+		{EventID: "b", EventName: "DeleteUser", EventTime: resumeAt},
+		{EventID: "c", EventName: "CloseAccount", EventTime: resumeAt.Add(time.Second)},
+	}
+
+	sortCloudTrailEvents(events)
+	filtered := resumeFilteredCloudTrailEvents(events, &resumeAt, "missing")
+
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "c", filtered[0].EventID)
+}
