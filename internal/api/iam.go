@@ -14,20 +14,20 @@ import (
 
 // IAMUser represents a single IAM user returned by the ListUsers API.
 type IAMUser struct {
+	CreateDate time.Time
 	UserID     string
 	UserName   string
 	Path       string
 	Arn        string
-	CreateDate time.Time
 }
 
 // IAMGroup represents a single IAM group.
 type IAMGroup struct {
+	CreateDate time.Time
 	GroupID    string
 	GroupName  string
 	Path       string
 	Arn        string
-	CreateDate time.Time
 }
 
 // IAMRole represents a single IAM role.
@@ -108,43 +108,43 @@ func (g iamGroupXML) toIAMGroup() IAMGroup {
 // listUsersResp maps the XML response from ListUsers.
 type listUsersResp struct {
 	Result struct {
-		IsTruncated bool   `xml:"IsTruncated"`
-		Marker      string `xml:"Marker"`
-		Users       struct {
+		Marker string `xml:"Marker"`
+		Users  struct {
 			Members []iamUserXML `xml:"member"`
 		} `xml:"Users"`
+		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListUsersResult"`
 }
 
 // listGroupsResp maps the XML response from ListGroups and ListGroupsForUser.
 type listGroupsResp struct {
 	Result struct {
-		IsTruncated bool   `xml:"IsTruncated"`
-		Marker      string `xml:"Marker"`
-		Groups      struct {
+		Marker string `xml:"Marker"`
+		Groups struct {
 			Members []iamGroupXML `xml:"member"`
 		} `xml:"Groups"`
+		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListGroupsResult"`
 }
 
 // listGroupsForUserResp has a different wrapper element name.
 type listGroupsForUserResp struct {
 	Result struct {
-		IsTruncated bool   `xml:"IsTruncated"`
-		Marker      string `xml:"Marker"`
-		Groups      struct {
+		Marker string `xml:"Marker"`
+		Groups struct {
 			Members []iamGroupXML `xml:"member"`
 		} `xml:"Groups"`
+		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListGroupsForUserResult"`
 }
 
 type listRolesResp struct {
 	Result struct {
-		IsTruncated bool   `xml:"IsTruncated"`
-		Marker      string `xml:"Marker"`
-		Roles       struct {
+		Marker string `xml:"Marker"`
+		Roles  struct {
 			Members []iamRoleXML `xml:"member"`
 		} `xml:"Roles"`
+		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListRolesResult"`
 }
 
@@ -294,11 +294,11 @@ func toStringSlice(value any) ([]string, bool) {
 
 type listPoliciesResp struct {
 	Result struct {
-		IsTruncated bool   `xml:"IsTruncated"`
-		Marker      string `xml:"Marker"`
-		Policies    struct {
+		Marker   string `xml:"Marker"`
+		Policies struct {
 			Members []iamPolicyXML `xml:"member"`
 		} `xml:"Policies"`
+		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListPoliciesResult"`
 }
 
@@ -339,9 +339,9 @@ type iamMFADeviceXML struct {
 
 type listVirtualMFADevicesResp struct {
 	Result struct {
-		IsTruncated       bool                 `xml:"IsTruncated"`
 		Marker            string               `xml:"Marker"`
 		VirtualMFADevices iamVirtualMFADevices `xml:"VirtualMFADevices"`
+		IsTruncated       bool                 `xml:"IsTruncated"`
 	} `xml:"ListVirtualMFADevicesResult"`
 }
 

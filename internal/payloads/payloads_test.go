@@ -5,9 +5,10 @@ import (
 	"testing"
 
 	"github.com/fgrzl/json/polymorphic"
-	"github.com/hydn-co/mesh-aws/internal/payloads"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hydn-co/mesh-aws/internal/payloads"
 )
 
 func TestShouldRegisterAddUserToGroupPayloadWhenPackageInitializes(t *testing.T) {

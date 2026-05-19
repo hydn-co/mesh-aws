@@ -3,13 +3,14 @@ package main
 import (
 	"log"
 
+	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/runner"
+
 	"github.com/hydn-co/mesh-aws/internal/actions"
 	"github.com/hydn-co/mesh-aws/internal/collectors/activity"
 	"github.com/hydn-co/mesh-aws/internal/collectors/entity"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/payloads"
-	"github.com/hydn-co/mesh-sdk/pkg/connector"
-	"github.com/hydn-co/mesh-sdk/pkg/runner"
 )
 
 func main() {

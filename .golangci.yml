@@ -1,12 +1,64 @@
 version: "2"
 
+linters:
+  default: standard
+  disable:
+    - depguard
+    - exhaustruct
+    - gomodguard
+    - gomodguard_v2
+    - goheader
+    - tagliatelle
+    - wsl
+  enable:
+    - embeddedstructfieldcheck
+    - govet
+    - staticcheck
+    - revive
+  settings:
+    embeddedstructfieldcheck:
+      empty-line: false
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    govet:
+      enable-all: true
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      severity: error
+      rules:
+        - name: blank-imports
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: unreachable-code
+  exclusions:
+    generated: strict
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+
 formatters:
   enable:
+    - gofmt
+    - gofumpt
     - goimports
     - golines
   settings:
     golines:
       max-len: 120
-linters:
-  enable:
-    - staticcheck
+    goimports:
+      local-prefixes:
+        - github.com/hydn-co/mesh-aws
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m

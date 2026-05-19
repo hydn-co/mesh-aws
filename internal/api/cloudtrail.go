@@ -20,10 +20,10 @@ type CloudTrailEvent struct {
 
 // cloudtrailLookupEventsRequest is the JSON request body for LookupEvents.
 type cloudtrailLookupEventsRequest struct {
-	LookupAttributes []cloudtrailLookupAttribute `json:"LookupAttributes,omitempty"`
 	StartTime        *int64                      `json:"StartTime,omitempty"`
-	MaxResults       int                         `json:"MaxResults,omitempty"`
 	NextToken        string                      `json:"NextToken,omitempty"`
+	LookupAttributes []cloudtrailLookupAttribute `json:"LookupAttributes,omitempty"`
+	MaxResults       int                         `json:"MaxResults,omitempty"`
 }
 
 type cloudtrailLookupAttribute struct {
@@ -33,16 +33,16 @@ type cloudtrailLookupAttribute struct {
 
 // cloudtrailLookupEventsResponse is the JSON response body from LookupEvents.
 type cloudtrailLookupEventsResponse struct {
-	Events    []cloudtrailEventJSON `json:"Events"`
 	NextToken string                `json:"NextToken"`
+	Events    []cloudtrailEventJSON `json:"Events"`
 }
 
 type cloudtrailEventJSON struct {
 	EventID         string  `json:"EventId"`
 	EventName       string  `json:"EventName"`
-	EventTime       float64 `json:"EventTime"` // Unix timestamp (seconds) as a JSON number
 	Username        string  `json:"Username"`
-	CloudTrailEvent string  `json:"CloudTrailEvent"` // raw JSON string
+	CloudTrailEvent string  `json:"CloudTrailEvent"`
+	EventTime       float64 `json:"EventTime"`
 }
 
 // LookupEvents returns one page of CloudTrail events filtered by event name.

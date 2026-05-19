@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/fgrzl/enumerators"
-	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
+
+	"github.com/hydn-co/mesh-aws/internal/api"
 )
 
 const cognitoUserPoolEventSource = "cognito-idp.amazonaws.com"
@@ -29,12 +30,12 @@ type awsCloudTrailEventDetail struct {
 }
 
 type awsCloudTrailUserIdentity struct {
+	OnBehalfOf   *awsCloudTrailOnBehalfOf `json:"onBehalfOf,omitempty"`
 	Type         string                   `json:"type"`
 	UserName     string                   `json:"userName"`
 	ARN          string                   `json:"arn"`
 	AccountID    string                   `json:"accountId"`
 	CredentialID string                   `json:"credentialId"`
-	OnBehalfOf   *awsCloudTrailOnBehalfOf `json:"onBehalfOf,omitempty"`
 }
 
 type awsCloudTrailOnBehalfOf struct {

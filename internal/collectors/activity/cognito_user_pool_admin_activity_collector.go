@@ -8,13 +8,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hydn-co/mesh-aws/internal/api"
-	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
+
+	"github.com/hydn-co/mesh-aws/internal/api"
+	"github.com/hydn-co/mesh-aws/internal/options"
 )
 
 // AWSCognitoUserPoolAdminActivityCollector collects Amazon Cognito user pool administrative activity.

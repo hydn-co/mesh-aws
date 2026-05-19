@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/fgrzl/json/polymorphic"
-	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hydn-co/mesh-aws/internal/options"
 )
 
 func TestShouldReturnAccountDiscriminatorWhenRequested(t *testing.T) {
@@ -128,8 +129,8 @@ func TestShouldReturnLoginRequirementsWhenRequested(t *testing.T) {
 
 func TestShouldReturnActivityCollectorSpacesWhenRequested(t *testing.T) {
 	testCases := []struct {
-		name   string
 		option interface{ GetSpaces() []spaces.Space }
+		name   string
 	}{
 		{name: "login activity", option: &options.AWSLoginActivityCollectorOptions{}},
 		{name: "cognito user pool admin activity", option: &options.AWSCognitoUserPoolAdminActivityCollectorOptions{}},

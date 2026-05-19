@@ -4,19 +4,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hydn-co/mesh-aws/internal/api"
 )
 
 func TestShouldMapCognitoLifecycleEventsWhenAdminAndGroupChangesOccur(t *testing.T) {
 	testCases := []struct {
-		name      string
-		eventName string
 		request   map[string]any
 		assertFn  func(*testing.T, events.ActivityEvent)
+		name      string
+		eventName string
 	}{
 		{
 			name:      "admin create user",
@@ -94,10 +95,10 @@ func TestShouldMapCognitoLifecycleEventsWhenAdminAndGroupChangesOccur(t *testing
 
 func TestShouldMapCognitoGroupMembershipAndStatusEventsWhenAdminChangesOccur(t *testing.T) {
 	testCases := []struct {
-		name      string
-		eventName string
 		request   map[string]any
 		assertFn  func(*testing.T, events.ActivityEvent)
+		name      string
+		eventName string
 	}{
 		{
 			name:      "admin add user to group",
@@ -212,9 +213,9 @@ func TestShouldMapCognitoGroupMembershipAndStatusEventsWhenAdminChangesOccur(t *
 
 func TestShouldMapCognitoAdministrativeActionWhenAttributesChangeOccur(t *testing.T) {
 	testCases := []struct {
+		assertFn  func(*testing.T, events.ActivityEvent)
 		name      string
 		eventName string
-		assertFn  func(*testing.T, events.ActivityEvent)
 	}{
 		{
 			name:      "admin update user attributes",
@@ -290,10 +291,10 @@ func TestShouldSkipWhenEventSourceIsNotCognitoUserPools(t *testing.T) {
 
 func TestShouldMapCognitoMfaPreferenceAndSignOutEventsWhenAdminChangesOccur(t *testing.T) {
 	testCases := []struct {
-		name      string
-		eventName string
 		request   map[string]any
 		assertFn  func(*testing.T, events.ActivityEvent)
+		name      string
+		eventName string
 	}{
 		{
 			name:      "admin set user mfa preference",
@@ -379,10 +380,10 @@ func TestShouldMapCognitoMfaPreferenceAndSignOutEventsWhenAdminChangesOccur(t *t
 
 func TestShouldMapCognitoDeviceProviderAndFeedbackEventsWhenAdminChangesOccur(t *testing.T) {
 	testCases := []struct {
-		name      string
-		eventName string
 		request   map[string]any
 		assertFn  func(*testing.T, events.ActivityEvent)
+		name      string
+		eventName string
 	}{
 		{
 			name:      "admin update device status",

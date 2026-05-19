@@ -4,10 +4,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hydn-co/mesh-aws/internal/api"
 )
 
 func TestShouldMapConsoleLoginSucceededWhenConsoleLoginSucceeds(t *testing.T) {

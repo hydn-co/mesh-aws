@@ -35,9 +35,9 @@ const (
 // Client sends signed HTTP requests to AWS IAM and CloudTrail.
 type Client struct {
 	creds        *AWSCredentials
+	http         *http.Client
 	region       string
 	sessionToken string
-	http         *http.Client
 }
 
 // AWSCredentials holds the AWS signing credentials parsed from connector configuration.
@@ -119,7 +119,6 @@ func (c *Client) organizationsPost(ctx context.Context, target string, body []by
 }
 
 func (c *Client) awsJSONPost(ctx context.Context, endpoint, target, service string, body []byte) ([]byte, error) {
-
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create %s request: %w", service, err)

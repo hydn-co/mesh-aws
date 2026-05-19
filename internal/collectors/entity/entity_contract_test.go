@@ -10,13 +10,14 @@ import (
 	"github.com/fgrzl/enumerators"
 	"github.com/fgrzl/json/polymorphic"
 	"github.com/google/uuid"
-	"github.com/hydn-co/mesh-aws/internal/api"
-	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/stretchr/testify/require"
+
+	"github.com/hydn-co/mesh-aws/internal/api"
+	"github.com/hydn-co/mesh-aws/internal/options"
 )
 
 type captureEntityEmitter struct {

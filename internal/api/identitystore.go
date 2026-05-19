@@ -15,16 +15,16 @@ const (
 
 // IdentityStoreUser represents a user returned by the AWS Identity Store API.
 type IdentityStoreUser struct {
+	CreatedAt    time.Time
 	UserID       string
 	UserName     string
 	DisplayName  string
 	GivenName    string
 	FamilyName   string
 	MiddleName   string
-	Active       bool
-	CreatedAt    time.Time
 	Emails       []IdentityStoreEmail
 	PhoneNumbers []IdentityStorePhoneNumber
+	Active       bool
 }
 
 // IdentityStoreEmail represents an email address returned by the Identity Store API.
@@ -41,40 +41,40 @@ type IdentityStorePhoneNumber struct {
 
 // IdentityStoreGroup represents a group returned by the AWS Identity Store API.
 type IdentityStoreGroup struct {
+	CreatedAt   time.Time
 	GroupID     string
 	DisplayName string
 	Description string
-	CreatedAt   time.Time
 }
 
 // IdentityStoreGroupMembership represents a group membership returned by the AWS Identity Store API.
 type IdentityStoreGroupMembership struct {
+	CreatedAt    time.Time
 	MembershipID string
 	GroupID      string
 	MemberUserID string
-	CreatedAt    time.Time
 }
 
 type identityStoreListUsersRequest struct {
 	IdentityStoreID string `json:"IdentityStoreId"`
-	MaxResults      int    `json:"MaxResults,omitempty"`
 	NextToken       string `json:"NextToken,omitempty"`
+	MaxResults      int    `json:"MaxResults,omitempty"`
 }
 
 type identityStoreListUsersResponse struct {
-	Users     []identityStoreUserJSON `json:"Users"`
 	NextToken string                  `json:"NextToken"`
+	Users     []identityStoreUserJSON `json:"Users"`
 }
 
 type identityStoreUserJSON struct {
+	Name         *identityStoreNameJSON   `json:"Name"`
 	UserID       string                   `json:"UserId"`
 	UserName     string                   `json:"UserName"`
 	DisplayName  string                   `json:"DisplayName"`
-	CreatedAt    float64                  `json:"CreatedAt"`
-	Active       bool                     `json:"Active"`
-	Name         *identityStoreNameJSON   `json:"Name"`
 	Emails       []identityStoreEmailJSON `json:"Emails"`
 	PhoneNumbers []identityStorePhoneJSON `json:"PhoneNumbers"`
+	CreatedAt    float64                  `json:"CreatedAt"`
+	Active       bool                     `json:"Active"`
 }
 
 type identityStoreNameJSON struct {
@@ -95,13 +95,13 @@ type identityStorePhoneJSON struct {
 
 type identityStoreListGroupsRequest struct {
 	IdentityStoreID string `json:"IdentityStoreId"`
-	MaxResults      int    `json:"MaxResults,omitempty"`
 	NextToken       string `json:"NextToken,omitempty"`
+	MaxResults      int    `json:"MaxResults,omitempty"`
 }
 
 type identityStoreListGroupsResponse struct {
-	Groups    []identityStoreGroupJSON `json:"Groups"`
 	NextToken string                   `json:"NextToken"`
+	Groups    []identityStoreGroupJSON `json:"Groups"`
 }
 
 type identityStoreGroupJSON struct {
@@ -114,22 +114,22 @@ type identityStoreGroupJSON struct {
 type identityStoreListGroupMembershipsRequest struct {
 	IdentityStoreID string `json:"IdentityStoreId"`
 	GroupID         string `json:"GroupId"`
-	MaxResults      int    `json:"MaxResults,omitempty"`
 	NextToken       string `json:"NextToken,omitempty"`
+	MaxResults      int    `json:"MaxResults,omitempty"`
 }
 
 type identityStoreListGroupMembershipsResponse struct {
-	GroupMemberships []identityStoreGroupMembershipJSON `json:"GroupMemberships"`
 	NextToken        string                             `json:"NextToken"`
+	GroupMemberships []identityStoreGroupMembershipJSON `json:"GroupMemberships"`
 }
 
 type identityStoreGroupMembershipJSON struct {
-	MembershipID string  `json:"MembershipId"`
-	GroupID      string  `json:"GroupId"`
-	CreatedAt    float64 `json:"CreatedAt"`
+	MembershipID string `json:"MembershipId"`
+	GroupID      string `json:"GroupId"`
 	MemberID     struct {
 		UserID string `json:"UserId"`
 	} `json:"MemberId"`
+	CreatedAt float64 `json:"CreatedAt"`
 }
 
 // ListIdentityStoreUsers returns one page of users for the given Identity Store ID.
