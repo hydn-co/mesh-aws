@@ -622,6 +622,38 @@ func (c *Client) DeactivateMFADevice(ctx context.Context, userName, serialNumber
 	return nil
 }
 
+// CreateUser creates a new IAM user with the given name and optional path.
+func (c *Client) CreateUser(ctx context.Context, userName, path string) error {
+	params := map[string]string{
+		"Action":   "CreateUser",
+		"UserName": userName,
+	}
+	if path != "" {
+		params["Path"] = path
+	}
+	_, err := c.iamPost(ctx, params)
+	if err != nil {
+		return fmt.Errorf("create user %q: %w", userName, err)
+	}
+	return nil
+}
+
+// CreateGroup creates a new IAM group with the given name and optional path.
+func (c *Client) CreateGroup(ctx context.Context, groupName, path string) error {
+	params := map[string]string{
+		"Action":    "CreateGroup",
+		"GroupName": groupName,
+	}
+	if path != "" {
+		params["Path"] = path
+	}
+	_, err := c.iamPost(ctx, params)
+	if err != nil {
+		return fmt.Errorf("create group %q: %w", groupName, err)
+	}
+	return nil
+}
+
 // AddUserToGroup adds the given IAM user to the given IAM group.
 func (c *Client) AddUserToGroup(ctx context.Context, userName, groupName string) error {
 	_, err := c.iamPost(ctx, map[string]string{

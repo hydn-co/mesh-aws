@@ -9,3 +9,17 @@ func (p *AWSAddUserToGroupPayload) Validate() error {
 		connectorutil.RequiredString{Name: "group_name", Value: p.GroupName},
 	)
 }
+
+func (p *AWSCreateUserPayload) Validate() error {
+	return connectorutil.RequireStrings(
+		"create user payload",
+		connectorutil.RequiredString{Name: "user_name", Value: p.UserName},
+	)
+}
+
+func (p *AWSCreateGroupPayload) Validate() error {
+	return connectorutil.RequireStrings(
+		"create group payload",
+		connectorutil.RequiredString{Name: "group_name", Value: p.GroupName},
+	)
+}

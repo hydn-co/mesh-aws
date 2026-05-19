@@ -206,6 +206,32 @@ func WithManifest() *runner.Manifest {
 		runner.Factory(actions.NewAWSAddUserToGroupAction),
 	)
 
+	manifest.MustRegisterFeature(
+		"aws_create_user_action",
+		"Provision User",
+		"Creates a new IAM user.",
+		runner.FeatureUnschedulable,
+		runner.FeatureTypeAction,
+		new(options.AWSCreateUserActionOptions),
+		new(payloads.AWSCreateUserPayload),
+		runner.FeatureResumeBehaviorNone,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(actions.NewAWSCreateUserAction),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_create_group_action",
+		"Provision Group",
+		"Creates a new IAM group.",
+		runner.FeatureUnschedulable,
+		runner.FeatureTypeAction,
+		new(options.AWSCreateGroupActionOptions),
+		new(payloads.AWSCreateGroupPayload),
+		runner.FeatureResumeBehaviorNone,
+		runner.APIKeyAndSecretCredential,
+		runner.Factory(actions.NewAWSCreateGroupAction),
+	)
+
 	if err := manifest.Validate(); err != nil {
 		log.Fatal(err)
 	}

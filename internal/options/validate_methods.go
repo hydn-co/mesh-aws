@@ -117,3 +117,19 @@ func (o *AWSAddUserToGroupActionOptions) Validate() error {
 
 	return o.AWSConnectionOptionsCore.Validate()
 }
+
+func (o *AWSCreateUserActionOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}
+
+func (o *AWSCreateGroupActionOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	return o.AWSConnectionOptionsCore.Validate()
+}

@@ -17,4 +17,6 @@ func init() {
 	polymorphic.RegisterType[AWSEntitlementActivityCollectorOptions]()
 	polymorphic.RegisterType[AWSAccountActivityCollectorOptions]()
 	polymorphic.RegisterType[AWSAddUserToGroupActionOptions]()
+	polymorphic.RegisterType[AWSCreateUserActionOptions]()
+	polymorphic.RegisterType[AWSCreateGroupActionOptions]()
 }
