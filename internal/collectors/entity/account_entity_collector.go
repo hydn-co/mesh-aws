@@ -153,9 +153,8 @@ func (c *AWSAccountEntityCollector) emitIAMAccountsAndMemberships(
 		}
 
 		account := entities.NewAccount()
-		account.AccountRef = user.UserID
+		account.AccountRef = user.Arn
 		account.Name = user.UserName
-		account.Description = user.Arn
 		account.AccountType = types.AccountTypeUser
 		if !user.CreateDate.IsZero() {
 			account.CreatedAt = &user.CreateDate
@@ -186,7 +185,7 @@ func (c *AWSAccountEntityCollector) emitIAMAccountsAndMemberships(
 
 			member := entities.NewGroupMember()
 			member.GroupRef = group.GroupID
-			member.AccountRef = user.UserID
+			member.AccountRef = user.Arn
 			if err := c.Emit(ctx, member); err != nil {
 				return fmt.Errorf("emit IAM group membership %s/%s: %w", group.GroupID, user.UserID, err)
 			}
@@ -223,7 +222,6 @@ func (c *AWSAccountEntityCollector) emitIdentityStoreAccountsAndMemberships(
 		account.FirstName = user.GivenName
 		account.MiddleName = user.MiddleName
 		account.LastName = user.FamilyName
-		account.Description = user.UserID
 		account.AccountType = types.AccountTypeUser
 		account.Enabled = user.Active
 		if !user.CreatedAt.IsZero() {
@@ -300,7 +298,7 @@ func (c *AWSAccountEntityCollector) emitServicePrincipalAccounts(
 		}
 
 		account := entities.NewAccount()
-		account.AccountRef = role.RoleID
+		account.AccountRef = role.Arn
 		account.Name = role.RoleName
 		account.Description = role.Description
 		account.AccountType = types.AccountTypeServicePrincipal
@@ -325,10 +323,9 @@ func (c *AWSAccountEntityCollector) emitManagementAccount(ctx context.Context, a
 	}
 
 	account := entities.NewAccount()
-	account.AccountRef = organization.MasterAccountID
+	account.AccountRef = organization.MasterAccountArn
 	account.Name = organization.MasterAccountID
 	account.DisplayName = organization.MasterAccountEmail
-	account.Description = organization.MasterAccountArn
 	account.AccountType = types.AccountTypeRoot
 	account.Enabled = true
 	if organization.MasterAccountEmail != "" {

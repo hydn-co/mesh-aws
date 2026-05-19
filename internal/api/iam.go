@@ -34,6 +34,7 @@ type IAMGroup struct {
 type IAMRole struct {
 	RoleID            string
 	RoleName          string
+	Arn               string
 	Description       string
 	ServicePrincipals []string
 }
@@ -150,6 +151,7 @@ type listRolesResp struct {
 type iamRoleXML struct {
 	RoleID                   string `xml:"RoleId"`
 	RoleName                 string `xml:"RoleName"`
+	Arn                      string `xml:"Arn"`
 	Description              string `xml:"Description"`
 	AssumeRolePolicyDocument string `xml:"AssumeRolePolicyDocument"`
 }
@@ -158,6 +160,7 @@ func (r iamRoleXML) toIAMRole() IAMRole {
 	return IAMRole{
 		RoleID:            r.RoleID,
 		RoleName:          r.RoleName,
+		Arn:               r.Arn,
 		Description:       r.Description,
 		ServicePrincipals: extractServicePrincipals(r.AssumeRolePolicyDocument),
 	}

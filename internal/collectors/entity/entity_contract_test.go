@@ -136,11 +136,13 @@ func (fakeAWSContractClient) IAMRoleEnumerator(_ context.Context) enumerators.En
 	return sliceEnumerator([]api.IAMRole{{
 		RoleID:            "role-1",
 		RoleName:          "admins",
+		Arn:               "arn:aws:iam::123456789012:role/admins",
 		Description:       "Admins role",
 		ServicePrincipals: []string{"lambda.amazonaws.com"},
 	}, {
 		RoleID:      "role-2",
 		RoleName:    "human-assumable",
+		Arn:         "arn:aws:iam::123456789012:role/human-assumable",
 		Description: "Human assumable role",
 	}})
 }
@@ -209,23 +211,45 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenAccountCollectorRunsWithInjectedCl
 
 	servicePrincipalCount := 0
 	humanAssumableRoleCount := 0
+	seenExpectedRefs := map[string]bool{
+		"arn:aws:iam::123456789012:user/alice":                               false,
+		"arn:aws:iam::123456789012:role/admins":                              false,
+		"idstore-user-1":                                                     false,
+		"arn:aws:organizations::123456789012:account/o-example/123456789012": false,
+	}
 	for _, emitted := range emitter.emitted {
 		account, ok := emitted.(*entities.Account)
 		if !ok {
 			continue
 		}
-		if account.AccountRef == "role-1" {
+		if _, ok := seenExpectedRefs[account.AccountRef]; ok {
+			seenExpectedRefs[account.AccountRef] = true
+		}
+		if account.AccountRef == "arn:aws:iam::123456789012:role/admins" {
 			require.Equal(t, types.AccountTypeServicePrincipal, account.AccountType)
 			require.True(t, account.Enabled)
+			require.Equal(t, "Admins role", account.Description)
 			servicePrincipalCount++
 		}
-		if account.AccountRef == "role-2" {
+		if account.AccountRef == "arn:aws:iam::123456789012:role/human-assumable" {
 			humanAssumableRoleCount++
+		}
+		if account.AccountRef == "arn:aws:iam::123456789012:user/alice" {
+			require.Empty(t, account.Description)
+		}
+		if account.AccountRef == "idstore-user-1" {
+			require.Empty(t, account.Description)
+		}
+		if account.AccountRef == "arn:aws:organizations::123456789012:account/o-example/123456789012" {
+			require.Empty(t, account.Description)
 		}
 	}
 
 	require.Equal(t, 1, servicePrincipalCount)
 	require.Zero(t, humanAssumableRoleCount)
+	for ref, seen := range seenExpectedRefs {
+		require.Truef(t, seen, "expected emitted account ref %s", ref)
+	}
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenGroupCollectorRunsWithInjectedClient(t *testing.T) {

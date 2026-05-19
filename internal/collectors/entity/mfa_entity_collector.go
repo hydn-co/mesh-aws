@@ -16,6 +16,7 @@ import (
 
 type awsMFAEntityClient interface {
 	IAMVirtualMFADeviceEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMVirtualMFADevice]
+	IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMUser]
 }
 
 type awsMFAEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsMFAEntityClient, error)
@@ -82,6 +83,20 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 
 	mfasEmitted := 0
 	linksEmitted := 0
+	userArnByID := map[string]string{}
+	userArnByName := map[string]string{}
+	userEnum := c.client.IAMUserEnumerator(ctx)
+	if err := enumerators.ForEach(userEnum, func(user api.IAMUser) error {
+		if user.UserID != "" {
+			userArnByID[user.UserID] = user.Arn
+		}
+		if user.UserName != "" {
+			userArnByName[user.UserName] = user.Arn
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("enumerate IAM users for MFA links: %w", err)
+	}
 	mfaEnum := c.client.IAMVirtualMFADeviceEnumerator(ctx)
 	if err := enumerators.ForEach(mfaEnum, func(device api.IAMVirtualMFADevice) error {
 		if err := ctx.Err(); err != nil {
@@ -104,7 +119,13 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 		}
 
 		link := entities.NewAccountMultiFactor()
-		link.AccountRef = device.UserID
+		if arn := userArnByID[device.UserID]; arn != "" {
+			link.AccountRef = arn
+		} else if arn := userArnByName[device.UserName]; arn != "" {
+			link.AccountRef = arn
+		} else {
+			link.AccountRef = device.UserID
+		}
 		link.MultiFactorRef = device.SerialNumber
 		if !device.EnableDate.IsZero() {
 			link.CreatedAt = &device.EnableDate
