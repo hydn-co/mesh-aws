@@ -31,6 +31,10 @@ func NewAWSSessionActivityCollector(
 }
 
 func (c *AWSSessionActivityCollector) Init(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := connectorutil.Validate(c.GetOptions(), "feature options"); err != nil {
 		return err
 	}

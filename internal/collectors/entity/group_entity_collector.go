@@ -51,6 +51,10 @@ func defaultAWSGroupEntityClientFactory(
 }
 
 func (c *AWSGroupEntityCollector) Init(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	opts := c.GetOptions()
 	if err := connectorutil.Validate(opts, "feature options"); err != nil {
 		return err

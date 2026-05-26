@@ -29,6 +29,10 @@ func NewAWSCreateUserAction(
 }
 
 func (a *AWSCreateUserAction) Init(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := connectorutil.Validate(a.GetOptions(), "feature options"); err != nil {
 		return err
 	}
