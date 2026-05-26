@@ -47,6 +47,10 @@ func defaultAWSPolicyEntityClientFactory(
 }
 
 func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if err := connectorutil.Validate(c.GetOptions(), "feature options"); err != nil {
 		return err
 	}

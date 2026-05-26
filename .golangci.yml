@@ -35,6 +35,9 @@ linters:
         - name: error-strings
         - name: errorf
         - name: unreachable-code
+        - name: unused-parameter
+          arguments:
+            - allow-regex: "^_"
   exclusions:
     generated: strict
     rules:
