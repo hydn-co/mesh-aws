@@ -21,15 +21,19 @@ import (
 // AWSCognitoUserPoolAdminActivityCollector collects Amazon Cognito user pool administrative activity.
 type AWSCognitoUserPoolAdminActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSCognitoUserPoolAdminActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSCognitoUserPoolAdminActivityCollector constructs the collector with the given feature context.
 func NewAWSCognitoUserPoolAdminActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSCognitoUserPoolAdminActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSCognitoUserPoolAdminActivityCollector{TypedFeatureContext: ctx}
+	return &AWSCognitoUserPoolAdminActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSCognitoUserPoolAdminActivityCollector) Init(ctx context.Context) error {
@@ -44,7 +48,10 @@ func (c *AWSCognitoUserPoolAdminActivityCollector) Init(ctx context.Context) err
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

@@ -19,15 +19,19 @@ import (
 // AWSGroupMembershipActivityCollector collects AWS group membership changes.
 type AWSGroupMembershipActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupMembershipActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSGroupMembershipActivityCollector constructs the collector with the given feature context.
 func NewAWSGroupMembershipActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSGroupMembershipActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSGroupMembershipActivityCollector{TypedFeatureContext: ctx}
+	return &AWSGroupMembershipActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSGroupMembershipActivityCollector) Init(ctx context.Context) error {
@@ -42,7 +46,10 @@ func (c *AWSGroupMembershipActivityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

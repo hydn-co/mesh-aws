@@ -19,15 +19,19 @@ import (
 // AWSAccountActivityCollector collects AWS user and organization account lifecycle activity.
 type AWSAccountActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSAccountActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSAccountActivityCollector constructs the collector with the given feature context.
 func NewAWSAccountActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSAccountActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSAccountActivityCollector{TypedFeatureContext: ctx}
+	return &AWSAccountActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSAccountActivityCollector) Init(ctx context.Context) error {
@@ -42,7 +46,10 @@ func (c *AWSAccountActivityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

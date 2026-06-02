@@ -141,11 +141,35 @@ func (fakeAWSContractClient) IAMRoleEnumerator(_ context.Context) enumerators.En
 		Description:       "Admins role",
 		ServicePrincipals: []string{"lambda.amazonaws.com"},
 	}, {
-		RoleID:      "role-2",
-		RoleName:    "human-assumable",
-		Arn:         "arn:aws:iam::123456789012:role/human-assumable",
-		Description: "Human assumable role",
+		RoleID:        "role-2",
+		RoleName:      "human-assumable",
+		Arn:           "arn:aws:iam::123456789012:role/human-assumable",
+		Description:   "Human assumable role",
+		AWSPrincipals: []string{"arn:aws:iam::123456789012:user/alice"},
 	}})
+}
+
+func (fakeAWSContractClient) IAMAttachedRolePolicyEnumerator(
+	_ context.Context,
+	roleName string,
+) enumerators.Enumerator[api.IAMAttachedPolicy] {
+	if roleName == "" {
+		panic("unexpected empty role name")
+	}
+	return sliceEnumerator([]api.IAMAttachedPolicy{{
+		PolicyName: "AdministratorAccess",
+		PolicyArn:  "arn:aws:iam::aws:policy/AdministratorAccess",
+	}})
+}
+
+func (fakeAWSContractClient) IAMInlineRolePolicyEnumerator(
+	_ context.Context,
+	roleName string,
+) enumerators.Enumerator[string] {
+	if roleName == "" {
+		panic("unexpected empty role name")
+	}
+	return sliceEnumerator([]string{"InlineAccess"})
 }
 
 func (fakeAWSContractClient) IAMPolicyEnumerator(
@@ -208,6 +232,7 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenAccountCollectorRunsWithInjectedCl
 	assertEmittedEntityContract(t, emitter.emitted, []any{
 		&entities.Account{},
 		&entities.GroupMember{},
+		&entities.AccountRole{},
 	}, (&options.AWSAccountEntityCollectorOptions{}).GetSpaces())
 
 	servicePrincipalCount := 0
@@ -251,6 +276,16 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenAccountCollectorRunsWithInjectedCl
 	for ref, seen := range seenExpectedRefs {
 		require.Truef(t, seen, "expected emitted account ref %s", ref)
 	}
+
+	accountRoles := make([]*entities.AccountRole, 0)
+	for _, emitted := range emitter.emitted {
+		if accountRole, ok := emitted.(*entities.AccountRole); ok {
+			accountRoles = append(accountRoles, accountRole)
+		}
+	}
+	require.Len(t, accountRoles, 1)
+	require.Equal(t, "arn:aws:iam::123456789012:user/alice", accountRoles[0].AccountRef)
+	require.Equal(t, "role-2", accountRoles[0].RoleRef)
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenGroupCollectorRunsWithInjectedClient(t *testing.T) {
@@ -279,6 +314,7 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenRoleCollectorRunsWithInjectedClien
 	collector := &AWSRoleEntityCollector{
 		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSRoleEntityCollectorOptions{
 			AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
+			CollectInlinePolicies:    true,
 		}),
 		newClient: func(_ *api.AWSCredentials, _, _ string) (awsRoleEntityClient, error) {
 			return fakeAWSContractClient{}, nil
@@ -291,6 +327,10 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenRoleCollectorRunsWithInjectedClien
 
 	assertEmittedEntityContract(t, emitter.emitted, []any{
 		&entities.Role{},
+		&entities.Permission{},
+		&entities.RolePermission{},
+		&entities.Resource{},
+		&entities.ResourcePermission{},
 	}, (&options.AWSRoleEntityCollectorOptions{}).GetSpaces())
 }
 
@@ -416,6 +456,16 @@ func emittedEntitySpace(item any) (spaces.Space, bool) {
 		return spaces.Groups, true
 	case *entities.Role:
 		return spaces.Roles, true
+	case *entities.Permission:
+		return spaces.Permissions, true
+	case *entities.RolePermission:
+		return spaces.RolePermissions, true
+	case *entities.Resource:
+		return spaces.Resources, true
+	case *entities.ResourcePermission:
+		return spaces.ResourcePermissions, true
+	case *entities.AccountRole:
+		return spaces.AccountRoles, true
 	case *entities.Policy:
 		return spaces.Policies, true
 	case *entities.MultiFactor:

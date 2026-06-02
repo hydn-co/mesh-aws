@@ -19,15 +19,19 @@ import (
 // AWSEntitlementActivityCollector collects AWS permission and policy change activity.
 type AWSEntitlementActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSEntitlementActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSEntitlementActivityCollector constructs the collector with the given feature context.
 func NewAWSEntitlementActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSEntitlementActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSEntitlementActivityCollector{TypedFeatureContext: ctx}
+	return &AWSEntitlementActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSEntitlementActivityCollector) Init(ctx context.Context) error {
@@ -42,7 +46,10 @@ func (c *AWSEntitlementActivityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

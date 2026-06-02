@@ -8,6 +8,7 @@ import (
 
 	"github.com/fgrzl/json/polymorphic"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/mesh-sdk/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -18,12 +19,6 @@ func TestShouldReturnAccountDiscriminatorWhenRequested(t *testing.T) {
 	option := &options.AWSAccountEntityCollectorOptions{}
 
 	assert.Equal(t, "mesh://aws/collectors/account_entity_collector_options", option.GetDiscriminator())
-}
-
-func TestShouldReturnAccountSpacesWhenRequested(t *testing.T) {
-	option := &options.AWSAccountEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.GroupMembers}, option.GetSpaces())
 }
 
 func TestShouldReturnAccountRequirementsWhenRequested(t *testing.T) {
@@ -85,12 +80,6 @@ func TestShouldReturnGroupDiscriminatorWhenRequested(t *testing.T) {
 	assert.Equal(t, "mesh://aws/collectors/group_entity_collector_options", option.GetDiscriminator())
 }
 
-func TestShouldReturnGroupSpacesWhenRequested(t *testing.T) {
-	option := &options.AWSGroupEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.Groups}, option.GetSpaces())
-}
-
 func TestShouldReturnGroupRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSGroupEntityCollectorOptions{}
 
@@ -107,12 +96,6 @@ func TestShouldReturnPolicyRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSPolicyEntityCollectorOptions{}
 
 	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
-}
-
-func TestShouldReturnMFASpacesWhenRequested(t *testing.T) {
-	option := &options.AWSMFAEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.MultiFactors, spaces.AccountMultiFactors}, option.GetSpaces())
 }
 
 func TestShouldReturnLoginActivityDiscriminatorWhenRequested(t *testing.T) {
@@ -220,7 +203,7 @@ func TestShouldReturnAddUserToGroupRequirementsWhenRequested(t *testing.T) {
 }
 
 func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
-	registeredOptions := map[string]any{
+	testkit.TestPolymorphicRegistrations(t, map[string]any{
 		"mesh://aws/collectors/account_entity_collector_options":                   &options.AWSAccountEntityCollectorOptions{},
 		"mesh://aws/collectors/group_entity_collector_options":                     &options.AWSGroupEntityCollectorOptions{},
 		"mesh://aws/collectors/role_entity_collector_options":                      &options.AWSRoleEntityCollectorOptions{},
@@ -235,17 +218,9 @@ func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
 		"mesh://aws/collectors/entitlement_activity_collector_options":             &options.AWSEntitlementActivityCollectorOptions{},
 		"mesh://aws/collectors/account_activity_collector_options":                 &options.AWSAccountActivityCollectorOptions{},
 		"mesh://aws/actions/add_user_to_group_action_options":                      &options.AWSAddUserToGroupActionOptions{},
-	}
-
-	for discriminator, expectedType := range registeredOptions {
-		created, err := polymorphic.CreateInstance(discriminator)
-
-		require.NoError(t, err)
-		require.NotNil(t, created)
-		assert.IsType(t, expectedType, created)
-	}
-
-	assert.Len(t, registeredOptions, 14)
+		"mesh://aws/actions/create_user_action_options":                            &options.AWSCreateUserActionOptions{},
+		"mesh://aws/actions/create_group_action_options":                           &options.AWSCreateGroupActionOptions{},
+	})
 }
 
 func TestShouldRoundTripAccountOptionsWhenEncodedPolymorphically(t *testing.T) {

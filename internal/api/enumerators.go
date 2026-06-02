@@ -83,6 +83,50 @@ func (c *Client) IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[I
 	})
 }
 
+// IAMAttachedRolePolicyEnumerator returns all managed policies attached to a role as an enumerator.
+func (c *Client) IAMAttachedRolePolicyEnumerator(
+	ctx context.Context,
+	roleName string,
+) enumerators.Enumerator[IAMAttachedPolicy] {
+	marker := ""
+
+	return awsPageEnumerator(ctx, func() ([]IAMAttachedPolicy, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		policies, truncated, nextMarker, err := c.ListAttachedRolePolicies(ctx, roleName, marker)
+		if err != nil {
+			return nil, false, err
+		}
+
+		marker = nextMarker
+		return policies, truncated && nextMarker != "", nil
+	})
+}
+
+// IAMInlineRolePolicyEnumerator returns all inline policy names embedded in a role as an enumerator.
+func (c *Client) IAMInlineRolePolicyEnumerator(
+	ctx context.Context,
+	roleName string,
+) enumerators.Enumerator[string] {
+	marker := ""
+
+	return awsPageEnumerator(ctx, func() ([]string, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		names, truncated, nextMarker, err := c.ListRolePolicies(ctx, roleName, marker)
+		if err != nil {
+			return nil, false, err
+		}
+
+		marker = nextMarker
+		return names, truncated && nextMarker != "", nil
+	})
+}
+
 // IAMPolicyEnumerator returns all IAM policies as an enumerator.
 func (c *Client) IAMPolicyEnumerator(ctx context.Context, scope string) enumerators.Enumerator[IAMPolicy] {
 	marker := ""
