@@ -6,7 +6,7 @@ require (
 	github.com/fgrzl/enumerators v1.0.1
 	github.com/fgrzl/json v1.0.2
 	github.com/google/uuid v1.6.0
-	github.com/hydn-co/mesh-sdk v0.2.69
+	github.com/hydn-co/mesh-sdk v0.2.72
 	github.com/stretchr/testify v1.11.1
 )
 
