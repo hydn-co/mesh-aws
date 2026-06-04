@@ -4,6 +4,7 @@ import (
 	"log"
 
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 
 	"github.com/hydn-co/mesh-aws/internal/actions"
@@ -12,6 +13,13 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/payloads"
 )
+
+// awsCredentials declares the single access-key + secret credential every AWS
+// feature uses. The slot is named connectorutil.DefaultCredentialName so
+// bindings created before named credentials existed continue to resolve.
+var awsCredentials = []runner.CredentialRequirement{
+	{Name: connectorutil.DefaultCredentialName, TemplateName: runner.APIKeyAndSecretCredential},
+}
 
 func main() {
 	runner.Run(WithManifest())
@@ -34,7 +42,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSAccountEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(entity.NewAWSAccountEntityCollector),
 	)
 
@@ -47,7 +55,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSGroupEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(entity.NewAWSGroupEntityCollector),
 	)
 
@@ -60,7 +68,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSRoleEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(entity.NewAWSRoleEntityCollector),
 	)
 
@@ -73,7 +81,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSPolicyEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(entity.NewAWSPolicyEntityCollector),
 	)
 
@@ -86,7 +94,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSMFAEntityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(entity.NewAWSMFAEntityCollector),
 	)
 
@@ -99,7 +107,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSLoginActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSLoginActivityCollector),
 	)
 
@@ -112,7 +120,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSSessionActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSSessionActivityCollector),
 	)
 
@@ -125,7 +133,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSCognitoUserPoolAdminActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSCognitoUserPoolAdminActivityCollector),
 	)
 
@@ -138,7 +146,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSGroupActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSGroupActivityCollector),
 	)
 
@@ -151,7 +159,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSGroupMembershipActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSGroupMembershipActivityCollector),
 	)
 
@@ -164,7 +172,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSRoleActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSRoleActivityCollector),
 	)
 
@@ -177,7 +185,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSEntitlementActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSEntitlementActivityCollector),
 	)
 
@@ -190,7 +198,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSAccountActivityCollectorOptions),
 		(*connector.NoPayload)(nil),
 		runner.FeatureResumeBehaviorLastActivity,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(activity.NewAWSAccountActivityCollector),
 	)
 
@@ -203,7 +211,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSAddUserToGroupActionOptions),
 		new(payloads.AWSAddUserToGroupPayload),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(actions.NewAWSAddUserToGroupAction),
 	)
 
@@ -216,7 +224,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSCreateUserActionOptions),
 		new(payloads.AWSCreateUserPayload),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(actions.NewAWSCreateUserAction),
 	)
 
@@ -229,7 +237,7 @@ func WithManifest() *runner.Manifest {
 		new(options.AWSCreateGroupActionOptions),
 		new(payloads.AWSCreateGroupPayload),
 		runner.FeatureResumeBehaviorNone,
-		runner.APIKeyAndSecretCredential,
+		awsCredentials,
 		runner.Factory(actions.NewAWSCreateGroupAction),
 	)
 

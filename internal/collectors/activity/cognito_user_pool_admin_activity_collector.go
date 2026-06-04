@@ -42,7 +42,10 @@ func (c *AWSCognitoUserPoolAdminActivityCollector) Init(ctx context.Context) err
 	}
 
 	opts := c.GetOptions()
-	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(c.GetCredentials())
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecretFrom(
+		c.GetCredentials(),
+		connectorutil.DefaultCredentialName,
+	)
 	if err != nil {
 		return fmt.Errorf("parse AWS credentials: %w", err)
 	}

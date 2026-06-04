@@ -14,6 +14,7 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
+	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
@@ -382,11 +383,15 @@ func newAWSContractFeatureContext[T connector.FeatureOptions](
 ) *connector.TypedFeatureContext[T, *connector.NoPayload] {
 	t.Helper()
 
-	credentials, err := json.Marshal(map[string]string{
+	apiKeyAndSecretCredential, err := json.Marshal(map[string]string{
 		"api_key":    "access-key-id",
 		"api_secret": "secret-access-key",
 	})
 	require.NoError(t, err)
+
+	credentials := map[string]json.RawMessage{
+		connectorutil.DefaultCredentialName: apiKeyAndSecretCredential,
+	}
 
 	return connector.NewTypedFeatureContext[T, *connector.NoPayload](
 		connector.NewFeatureContext(

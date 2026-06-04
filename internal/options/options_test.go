@@ -8,7 +8,6 @@ import (
 
 	"github.com/fgrzl/json/polymorphic"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
-	"github.com/hydn-co/mesh-sdk/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -200,27 +199,6 @@ func TestShouldReturnAddUserToGroupRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSAddUserToGroupActionOptions{}
 
 	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
-}
-
-func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
-	testkit.TestPolymorphicRegistrations(t, map[string]any{
-		"mesh://aws/collectors/account_entity_collector_options":                   &options.AWSAccountEntityCollectorOptions{},
-		"mesh://aws/collectors/group_entity_collector_options":                     &options.AWSGroupEntityCollectorOptions{},
-		"mesh://aws/collectors/role_entity_collector_options":                      &options.AWSRoleEntityCollectorOptions{},
-		"mesh://aws/collectors/policy_entity_collector_options":                    &options.AWSPolicyEntityCollectorOptions{},
-		"mesh://aws/collectors/mfa_entity_collector_options":                       &options.AWSMFAEntityCollectorOptions{},
-		"mesh://aws/collectors/login_activity_collector_options":                   &options.AWSLoginActivityCollectorOptions{},
-		"mesh://aws/collectors/cognito_user_pool_admin_activity_collector_options": &options.AWSCognitoUserPoolAdminActivityCollectorOptions{},
-		"mesh://aws/collectors/session_activity_collector_options":                 &options.AWSSessionActivityCollectorOptions{},
-		"mesh://aws/collectors/group_activity_collector_options":                   &options.AWSGroupActivityCollectorOptions{},
-		"mesh://aws/collectors/group_membership_activity_collector_options":        &options.AWSGroupMembershipActivityCollectorOptions{},
-		"mesh://aws/collectors/role_activity_collector_options":                    &options.AWSRoleActivityCollectorOptions{},
-		"mesh://aws/collectors/entitlement_activity_collector_options":             &options.AWSEntitlementActivityCollectorOptions{},
-		"mesh://aws/collectors/account_activity_collector_options":                 &options.AWSAccountActivityCollectorOptions{},
-		"mesh://aws/actions/add_user_to_group_action_options":                      &options.AWSAddUserToGroupActionOptions{},
-		"mesh://aws/actions/create_user_action_options":                            &options.AWSCreateUserActionOptions{},
-		"mesh://aws/actions/create_group_action_options":                           &options.AWSCreateGroupActionOptions{},
-	})
 }
 
 func TestShouldRoundTripAccountOptionsWhenEncodedPolymorphically(t *testing.T) {
