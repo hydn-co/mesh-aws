@@ -19,15 +19,19 @@ import (
 // AWSGroupActivityCollector collects AWS group creation and deletion activity.
 type AWSGroupActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSGroupActivityCollector constructs the collector with the given feature context.
 func NewAWSGroupActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSGroupActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSGroupActivityCollector{TypedFeatureContext: ctx}
+	return &AWSGroupActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSGroupActivityCollector) Init(ctx context.Context) error {
@@ -40,13 +44,19 @@ func (c *AWSGroupActivityCollector) Init(ctx context.Context) error {
 	}
 
 	opts := c.GetOptions()
-	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(c.GetCredentials())
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecretFrom(
+		c.GetCredentials(),
+		connectorutil.DefaultCredentialName,
+	)
 	if err != nil {
 		return fmt.Errorf("parse AWS credentials: %w", err)
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

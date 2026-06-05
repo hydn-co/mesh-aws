@@ -17,6 +17,27 @@ import (
 
 const cognitoUserPoolEventSource = "cognito-idp.amazonaws.com"
 
+// cloudTrailClient is the seam every activity collector depends on. It contains only the
+// CloudTrail enumeration method the collectors use, so tests can inject a fake client.
+type cloudTrailClient interface {
+	CloudTrailEventEnumerator(
+		ctx context.Context,
+		eventName string,
+		startTime *time.Time,
+	) enumerators.Enumerator[api.CloudTrailEvent]
+}
+
+// cloudTrailClientFactory builds a cloudTrailClient from connector credentials and connection
+// settings. Collectors set this in their constructor and call it in Init so tests can override it.
+type cloudTrailClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (cloudTrailClient, error)
+
+func defaultCloudTrailClientFactory(
+	creds *api.AWSCredentials,
+	region, sessionToken string,
+) (cloudTrailClient, error) {
+	return api.NewClient(creds, region, sessionToken)
+}
+
 type awsCloudTrailEventDetail struct {
 	EventSource         string                    `json:"eventSource"`
 	SourceIPAddress     string                    `json:"sourceIPAddress"`
@@ -137,7 +158,7 @@ func sessionResumeCursor(payload any) (*time.Time, string) {
 
 func collectMergedCloudTrailEvents(
 	ctx context.Context,
-	client *api.Client,
+	client cloudTrailClient,
 	eventNames []string,
 	startTime *time.Time,
 ) ([]api.CloudTrailEvent, error) {

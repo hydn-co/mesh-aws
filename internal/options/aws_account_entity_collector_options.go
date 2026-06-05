@@ -13,7 +13,7 @@ func (*AWSAccountEntityCollectorOptions) GetDiscriminator() string {
 }
 
 func (*AWSAccountEntityCollectorOptions) GetSpaces() []spaces.Space {
-	return []spaces.Space{spaces.Accounts, spaces.GroupMembers}
+	return []spaces.Space{spaces.Accounts, spaces.GroupMembers, spaces.AccountRoles}
 }
 
 func (*AWSAccountEntityCollectorOptions) GetRequirements() []string {

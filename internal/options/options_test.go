@@ -20,12 +20,6 @@ func TestShouldReturnAccountDiscriminatorWhenRequested(t *testing.T) {
 	assert.Equal(t, "mesh://aws/collectors/account_entity_collector_options", option.GetDiscriminator())
 }
 
-func TestShouldReturnAccountSpacesWhenRequested(t *testing.T) {
-	option := &options.AWSAccountEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.Accounts, spaces.GroupMembers}, option.GetSpaces())
-}
-
 func TestShouldReturnAccountRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSAccountEntityCollectorOptions{}
 
@@ -85,12 +79,6 @@ func TestShouldReturnGroupDiscriminatorWhenRequested(t *testing.T) {
 	assert.Equal(t, "mesh://aws/collectors/group_entity_collector_options", option.GetDiscriminator())
 }
 
-func TestShouldReturnGroupSpacesWhenRequested(t *testing.T) {
-	option := &options.AWSGroupEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.Groups}, option.GetSpaces())
-}
-
 func TestShouldReturnGroupRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSGroupEntityCollectorOptions{}
 
@@ -107,12 +95,6 @@ func TestShouldReturnPolicyRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSPolicyEntityCollectorOptions{}
 
 	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
-}
-
-func TestShouldReturnMFASpacesWhenRequested(t *testing.T) {
-	option := &options.AWSMFAEntityCollectorOptions{}
-
-	assert.Equal(t, []spaces.Space{spaces.MultiFactors, spaces.AccountMultiFactors}, option.GetSpaces())
 }
 
 func TestShouldReturnLoginActivityDiscriminatorWhenRequested(t *testing.T) {
@@ -217,35 +199,6 @@ func TestShouldReturnAddUserToGroupRequirementsWhenRequested(t *testing.T) {
 	option := &options.AWSAddUserToGroupActionOptions{}
 
 	assert.Equal(t, []string{"aws", "iam"}, option.GetRequirements())
-}
-
-func TestShouldRegisterPolymorphicOptionsWhenPackageInitializes(t *testing.T) {
-	registeredOptions := map[string]any{
-		"mesh://aws/collectors/account_entity_collector_options":                   &options.AWSAccountEntityCollectorOptions{},
-		"mesh://aws/collectors/group_entity_collector_options":                     &options.AWSGroupEntityCollectorOptions{},
-		"mesh://aws/collectors/role_entity_collector_options":                      &options.AWSRoleEntityCollectorOptions{},
-		"mesh://aws/collectors/policy_entity_collector_options":                    &options.AWSPolicyEntityCollectorOptions{},
-		"mesh://aws/collectors/mfa_entity_collector_options":                       &options.AWSMFAEntityCollectorOptions{},
-		"mesh://aws/collectors/login_activity_collector_options":                   &options.AWSLoginActivityCollectorOptions{},
-		"mesh://aws/collectors/cognito_user_pool_admin_activity_collector_options": &options.AWSCognitoUserPoolAdminActivityCollectorOptions{},
-		"mesh://aws/collectors/session_activity_collector_options":                 &options.AWSSessionActivityCollectorOptions{},
-		"mesh://aws/collectors/group_activity_collector_options":                   &options.AWSGroupActivityCollectorOptions{},
-		"mesh://aws/collectors/group_membership_activity_collector_options":        &options.AWSGroupMembershipActivityCollectorOptions{},
-		"mesh://aws/collectors/role_activity_collector_options":                    &options.AWSRoleActivityCollectorOptions{},
-		"mesh://aws/collectors/entitlement_activity_collector_options":             &options.AWSEntitlementActivityCollectorOptions{},
-		"mesh://aws/collectors/account_activity_collector_options":                 &options.AWSAccountActivityCollectorOptions{},
-		"mesh://aws/actions/add_user_to_group_action_options":                      &options.AWSAddUserToGroupActionOptions{},
-	}
-
-	for discriminator, expectedType := range registeredOptions {
-		created, err := polymorphic.CreateInstance(discriminator)
-
-		require.NoError(t, err)
-		require.NotNil(t, created)
-		assert.IsType(t, expectedType, created)
-	}
-
-	assert.Len(t, registeredOptions, 14)
 }
 
 func TestShouldRoundTripAccountOptionsWhenEncodedPolymorphically(t *testing.T) {

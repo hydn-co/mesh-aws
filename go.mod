@@ -4,9 +4,9 @@ go 1.25.6
 
 require (
 	github.com/fgrzl/enumerators v1.0.1
-	github.com/fgrzl/json v1.0.1
+	github.com/fgrzl/json v1.0.2
 	github.com/google/uuid v1.6.0
-	github.com/hydn-co/mesh-sdk v0.2.65
+	github.com/hydn-co/mesh-sdk v0.2.74
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -19,8 +19,8 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel v1.43.0 // indirect
-	go.opentelemetry.io/otel/metric v1.43.0 // indirect
-	go.opentelemetry.io/otel/trace v1.43.0 // indirect
+	go.opentelemetry.io/otel v1.44.0 // indirect
+	go.opentelemetry.io/otel/metric v1.44.0 // indirect
+	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -19,15 +19,19 @@ import (
 // AWSRoleActivityCollector collects AWS role, policy, and permission set lifecycle activity.
 type AWSRoleActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSRoleActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSRoleActivityCollector constructs the collector with the given feature context.
 func NewAWSRoleActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSRoleActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSRoleActivityCollector{TypedFeatureContext: ctx}
+	return &AWSRoleActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSRoleActivityCollector) Init(ctx context.Context) error {
@@ -40,13 +44,19 @@ func (c *AWSRoleActivityCollector) Init(ctx context.Context) error {
 	}
 
 	opts := c.GetOptions()
-	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(c.GetCredentials())
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecretFrom(
+		c.GetCredentials(),
+		connectorutil.DefaultCredentialName,
+	)
 	if err != nil {
 		return fmt.Errorf("parse AWS credentials: %w", err)
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

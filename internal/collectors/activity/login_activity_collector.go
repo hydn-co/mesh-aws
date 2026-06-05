@@ -20,15 +20,19 @@ import (
 // AWSLoginActivityCollector collects AWS Management Console and IAM Identity Center login activity.
 type AWSLoginActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSLoginActivityCollectorOptions, *connector.NoPayload]
-	client *api.Client
-	state  connectorutil.FeatureState
+	client    cloudTrailClient
+	newClient cloudTrailClientFactory
+	state     connectorutil.FeatureState
 }
 
 // NewAWSLoginActivityCollector constructs the collector with the given feature context.
 func NewAWSLoginActivityCollector(
 	ctx *connector.TypedFeatureContext[*options.AWSLoginActivityCollectorOptions, *connector.NoPayload],
 ) runner.Feature {
-	return &AWSLoginActivityCollector{TypedFeatureContext: ctx}
+	return &AWSLoginActivityCollector{
+		TypedFeatureContext: ctx,
+		newClient:           defaultCloudTrailClientFactory,
+	}
 }
 
 func (c *AWSLoginActivityCollector) Init(ctx context.Context) error {
@@ -41,13 +45,19 @@ func (c *AWSLoginActivityCollector) Init(ctx context.Context) error {
 	}
 
 	opts := c.GetOptions()
-	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(c.GetCredentials())
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecretFrom(
+		c.GetCredentials(),
+		connectorutil.DefaultCredentialName,
+	)
 	if err != nil {
 		return fmt.Errorf("parse AWS credentials: %w", err)
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	client, err := api.NewClient(creds, opts.GetRegion(), opts.GetSessionToken())
+	if c.newClient == nil {
+		c.newClient = defaultCloudTrailClientFactory
+	}
+	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return fmt.Errorf("create AWS client: %w", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
@@ -37,6 +38,7 @@ type IAMRole struct {
 	Arn               string
 	Description       string
 	ServicePrincipals []string
+	AWSPrincipals     []string
 }
 
 // IAMPolicy represents a single IAM managed policy.
@@ -44,6 +46,12 @@ type IAMPolicy struct {
 	PolicyName  string
 	PolicyID    string
 	Description string
+}
+
+// IAMAttachedPolicy represents a managed policy attached to a role.
+type IAMAttachedPolicy struct {
+	PolicyName string
+	PolicyArn  string
 }
 
 // IAMAccessKey represents metadata for one IAM access key.
@@ -163,6 +171,7 @@ func (r iamRoleXML) toIAMRole() IAMRole {
 		Arn:               r.Arn,
 		Description:       r.Description,
 		ServicePrincipals: extractServicePrincipals(r.AssumeRolePolicyDocument),
+		AWSPrincipals:     extractAWSPrincipals(r.AssumeRolePolicyDocument),
 	}
 }
 
@@ -213,6 +222,67 @@ func extractServicePrincipals(encodedPolicy string) []string {
 			}
 			seen[service] = struct{}{}
 			principals = append(principals, service)
+		}
+	}
+
+	if len(principals) == 0 {
+		return nil
+	}
+
+	return principals
+}
+
+// extractAWSPrincipals returns the concrete AWS principal ARNs (account-root, user, or role
+// ARNs) that are allowed to assume the role described by the encoded trust policy. Wildcard
+// principals ("*") and any value that is not an IAM ARN are skipped so that emitted
+// AccountRole references always point at a concrete principal.
+func extractAWSPrincipals(encodedPolicy string) []string {
+	if encodedPolicy == "" {
+		return nil
+	}
+
+	decodedPolicy, err := url.QueryUnescape(encodedPolicy)
+	if err != nil {
+		decodedPolicy = encodedPolicy
+	}
+
+	var policyDoc map[string]any
+	if err := json.Unmarshal([]byte(decodedPolicy), &policyDoc); err != nil {
+		return nil
+	}
+
+	statements, ok := toObjectSlice(policyDoc["Statement"])
+	if !ok {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	principals := make([]string, 0)
+	for _, statement := range statements {
+		if !statementAllowsServiceAssumeRole(statement) {
+			continue
+		}
+
+		principalMap, ok := toObject(statement["Principal"])
+		if !ok {
+			continue
+		}
+
+		arns, ok := toStringSlice(principalMap["AWS"])
+		if !ok {
+			continue
+		}
+
+		for _, arn := range arns {
+			arn = strings.TrimSpace(arn)
+			if !strings.HasPrefix(arn, "arn:aws:iam::") {
+				continue
+			}
+			if _, exists := seen[arn]; exists {
+				continue
+			}
+			seen[arn] = struct{}{}
+			principals = append(principals, arn)
 		}
 	}
 
@@ -306,6 +376,31 @@ type iamPolicyXML struct {
 	PolicyName  string `xml:"PolicyName"`
 	PolicyID    string `xml:"PolicyId"`
 	Description string `xml:"Description"`
+}
+
+type listAttachedRolePoliciesResp struct {
+	Result struct {
+		Marker           string `xml:"Marker"`
+		AttachedPolicies struct {
+			Members []iamAttachedPolicyXML `xml:"member"`
+		} `xml:"AttachedPolicies"`
+		IsTruncated bool `xml:"IsTruncated"`
+	} `xml:"ListAttachedRolePoliciesResult"`
+}
+
+type iamAttachedPolicyXML struct {
+	PolicyName string `xml:"PolicyName"`
+	PolicyArn  string `xml:"PolicyArn"`
+}
+
+type listRolePoliciesResp struct {
+	Result struct {
+		Marker      string `xml:"Marker"`
+		PolicyNames struct {
+			Members []string `xml:"member"`
+		} `xml:"PolicyNames"`
+		IsTruncated bool `xml:"IsTruncated"`
+	} `xml:"ListRolePoliciesResult"`
 }
 
 type listAccessKeysResp struct {
@@ -534,6 +629,61 @@ func (c *Client) ListPolicies(ctx context.Context, scope, marker string) ([]IAMP
 	return policies, resp.Result.IsTruncated, resp.Result.Marker, nil
 }
 
+// ListAttachedRolePolicies returns one page of managed policies attached to the given role.
+// Pass an empty marker for the first page.
+func (c *Client) ListAttachedRolePolicies(
+	ctx context.Context,
+	roleName, marker string,
+) ([]IAMAttachedPolicy, bool, string, error) {
+	params := map[string]string{
+		"Action":   "ListAttachedRolePolicies",
+		"RoleName": roleName,
+	}
+	if marker != "" {
+		params["Marker"] = marker
+	}
+
+	data, err := c.iamPost(ctx, params)
+	if err != nil {
+		return nil, false, "", fmt.Errorf("list attached role policies for %q: %w", roleName, err)
+	}
+
+	var resp listAttachedRolePoliciesResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, false, "", fmt.Errorf("parse list attached role policies response: %w", err)
+	}
+
+	policies := make([]IAMAttachedPolicy, len(resp.Result.AttachedPolicies.Members))
+	for i, m := range resp.Result.AttachedPolicies.Members {
+		policies[i] = IAMAttachedPolicy(m)
+	}
+	return policies, resp.Result.IsTruncated, resp.Result.Marker, nil
+}
+
+// ListRolePolicies returns one page of inline policy names embedded in the given role.
+// Pass an empty marker for the first page.
+func (c *Client) ListRolePolicies(ctx context.Context, roleName, marker string) ([]string, bool, string, error) {
+	params := map[string]string{
+		"Action":   "ListRolePolicies",
+		"RoleName": roleName,
+	}
+	if marker != "" {
+		params["Marker"] = marker
+	}
+
+	data, err := c.iamPost(ctx, params)
+	if err != nil {
+		return nil, false, "", fmt.Errorf("list role policies for %q: %w", roleName, err)
+	}
+
+	var resp listRolePoliciesResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, false, "", fmt.Errorf("parse list role policies response: %w", err)
+	}
+
+	return resp.Result.PolicyNames.Members, resp.Result.IsTruncated, resp.Result.Marker, nil
+}
+
 // ListAccessKeys returns all access keys for the given IAM user.
 func (c *Client) ListAccessKeys(ctx context.Context, userName string) ([]IAMAccessKey, error) {
 	data, err := c.iamPost(ctx, map[string]string{
@@ -725,6 +875,16 @@ func asIAMError(err error, target **IAMError) bool {
 	if e, ok := err.(*IAMError); ok {
 		*target = e
 		return true
+	}
+	return false
+}
+
+// IsNoSuchEntity reports whether err, or any error it wraps, is an IAM NoSuchEntity error.
+// Collectors use it to skip resources that were deleted mid-enumeration instead of failing.
+func IsNoSuchEntity(err error) bool {
+	var iamErr *IAMError
+	if errors.As(err, &iamErr) {
+		return iamErr.IsNoSuchEntity()
 	}
 	return false
 }

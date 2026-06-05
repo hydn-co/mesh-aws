@@ -73,7 +73,10 @@ func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
 		return err
 	}
 
-	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecret(c.GetCredentials())
+	accessKeyID, secretAccessKey, err := connectorutil.ExtractAPIKeyAndSecretFrom(
+		c.GetCredentials(),
+		connectorutil.DefaultCredentialName,
+	)
 	if err != nil {
 		return fmt.Errorf("parse AWS credentials: %w", err)
 	}
@@ -105,12 +108,13 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 
 	accountsEmitted := 0
 	membershipsEmitted := 0
+	accountRolesEmitted := 0
 
 	if err := c.emitIAMAccountsAndMemberships(ctx, &accountsEmitted, &membershipsEmitted); err != nil {
 		return err
 	}
 
-	if err := c.emitServicePrincipalAccounts(ctx, &accountsEmitted); err != nil {
+	if err := c.emitRoleDerivedEntities(ctx, &accountsEmitted, &accountRolesEmitted); err != nil {
 		return err
 	}
 
@@ -132,6 +136,7 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Finished AWS account entity collector",
 		"accounts_emitted", accountsEmitted,
 		"group_memberships_emitted", membershipsEmitted,
+		"account_roles_emitted", accountRolesEmitted,
 	)
 	return nil
 }
@@ -288,9 +293,13 @@ func (c *AWSAccountEntityCollector) emitIdentityStoreAccountsAndMemberships(
 	return nil
 }
 
-func (c *AWSAccountEntityCollector) emitServicePrincipalAccounts(
+// emitRoleDerivedEntities walks IAM roles once and emits both the service-principal accounts
+// (roles assumable by an AWS service) and the AccountRole links derived from each role's trust
+// policy (the concrete AWS principals permitted to assume the role).
+func (c *AWSAccountEntityCollector) emitRoleDerivedEntities(
 	ctx context.Context,
 	accountsEmitted *int,
+	accountRolesEmitted *int,
 ) error {
 	roleEnum := c.client.IAMRoleEnumerator(ctx)
 	if err := enumerators.ForEach(roleEnum, func(role api.IAMRole) error {
@@ -298,24 +307,34 @@ func (c *AWSAccountEntityCollector) emitServicePrincipalAccounts(
 			return err
 		}
 
-		if len(role.ServicePrincipals) == 0 {
-			return nil
+		if len(role.ServicePrincipals) > 0 {
+			account := entities.NewAccount()
+			account.AccountRef = role.Arn
+			account.Name = role.RoleName
+			account.Description = role.Description
+			account.AccountType = types.AccountTypeServicePrincipal
+			account.Enabled = true
+
+			if err := c.Emit(ctx, account); err != nil {
+				return fmt.Errorf("emit IAM service principal %s: %w", role.RoleID, err)
+			}
+			(*accountsEmitted)++
 		}
 
-		account := entities.NewAccount()
-		account.AccountRef = role.Arn
-		account.Name = role.RoleName
-		account.Description = role.Description
-		account.AccountType = types.AccountTypeServicePrincipal
-		account.Enabled = true
+		for _, principal := range role.AWSPrincipals {
+			accountRole := entities.NewAccountRole()
+			accountRole.AccountRef = principal
+			accountRole.RoleRef = role.RoleID
 
-		if err := c.Emit(ctx, account); err != nil {
-			return fmt.Errorf("emit IAM service principal %s: %w", role.RoleID, err)
+			if err := c.Emit(ctx, accountRole); err != nil {
+				return fmt.Errorf("emit account role %s/%s: %w", principal, role.RoleID, err)
+			}
+			(*accountRolesEmitted)++
 		}
-		(*accountsEmitted)++
+
 		return nil
 	}); err != nil {
-		return fmt.Errorf("enumerate IAM roles for service principals: %w", err)
+		return fmt.Errorf("enumerate IAM roles for account-derived entities: %w", err)
 	}
 
 	return nil
