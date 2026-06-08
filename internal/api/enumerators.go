@@ -231,6 +231,110 @@ func (c *Client) IdentityStoreGroupMembershipEnumerator(
 	})
 }
 
+// OrganizationAccountEnumerator returns all member accounts in the organization as an enumerator.
+func (c *Client) OrganizationAccountEnumerator(ctx context.Context) enumerators.Enumerator[Account] {
+	nextToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]Account, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		accounts, token, err := c.ListAccounts(ctx, nextToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		nextToken = token
+		return accounts, token != "", nil
+	})
+}
+
+// OrganizationAccountsForParentEnumerator returns the member accounts directly under
+// the given parent (root or OU) as an enumerator.
+func (c *Client) OrganizationAccountsForParentEnumerator(
+	ctx context.Context,
+	parentID string,
+) enumerators.Enumerator[Account] {
+	nextToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]Account, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		accounts, token, err := c.ListAccountsForParent(ctx, parentID, nextToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		nextToken = token
+		return accounts, token != "", nil
+	})
+}
+
+// OrganizationRootEnumerator returns the organization roots as an enumerator.
+func (c *Client) OrganizationRootEnumerator(ctx context.Context) enumerators.Enumerator[OrganizationalUnit] {
+	nextToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]OrganizationalUnit, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		roots, token, err := c.ListRoots(ctx, nextToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		nextToken = token
+		return roots, token != "", nil
+	})
+}
+
+// OrganizationalUnitsForParentEnumerator returns the OUs directly under the given
+// parent (root or OU) as an enumerator.
+func (c *Client) OrganizationalUnitsForParentEnumerator(
+	ctx context.Context,
+	parentID string,
+) enumerators.Enumerator[OrganizationalUnit] {
+	nextToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]OrganizationalUnit, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		ous, token, err := c.ListOrganizationalUnitsForParent(ctx, parentID, nextToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		nextToken = token
+		return ous, token != "", nil
+	})
+}
+
+// SecretEnumerator returns all Secrets Manager secrets (metadata only) in the
+// client's region as an enumerator.
+func (c *Client) SecretEnumerator(ctx context.Context) enumerators.Enumerator[Secret] {
+	nextToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]Secret, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		secrets, token, err := c.ListSecrets(ctx, nextToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		nextToken = token
+		return secrets, token != "", nil
+	})
+}
+
 // CloudTrailEventEnumerator returns CloudTrail lookup events for a given event name and start time.
 func (c *Client) CloudTrailEventEnumerator(
 	ctx context.Context,

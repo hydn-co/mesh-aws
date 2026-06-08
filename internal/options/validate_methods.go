@@ -8,6 +8,9 @@ func (o *AWSAccountEntityCollectorOptions) Validate() error {
 	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
 		return err
 	}
+	if err := o.AWSScopeOptionsCore.Validate(); err != nil {
+		return err
+	}
 	return o.AWSIdentityStoreOptionsCore.Validate()
 }
 
@@ -19,6 +22,9 @@ func (o *AWSGroupEntityCollectorOptions) Validate() error {
 	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
 		return err
 	}
+	if err := o.AWSScopeOptionsCore.Validate(); err != nil {
+		return err
+	}
 	return o.AWSIdentityStoreOptionsCore.Validate()
 }
 
@@ -27,7 +33,10 @@ func (o *AWSRoleEntityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSPolicyEntityCollectorOptions) Validate() error {
@@ -35,7 +44,10 @@ func (o *AWSPolicyEntityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSMFAEntityCollectorOptions) Validate() error {
@@ -43,7 +55,10 @@ func (o *AWSMFAEntityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSLoginActivityCollectorOptions) Validate() error {
@@ -51,7 +66,10 @@ func (o *AWSLoginActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSCognitoUserPoolAdminActivityCollectorOptions) Validate() error {
@@ -59,7 +77,10 @@ func (o *AWSCognitoUserPoolAdminActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSSessionActivityCollectorOptions) Validate() error {
@@ -67,7 +88,10 @@ func (o *AWSSessionActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSGroupActivityCollectorOptions) Validate() error {
@@ -75,7 +99,10 @@ func (o *AWSGroupActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSGroupMembershipActivityCollectorOptions) Validate() error {
@@ -83,7 +110,10 @@ func (o *AWSGroupMembershipActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSRoleActivityCollectorOptions) Validate() error {
@@ -91,7 +121,10 @@ func (o *AWSRoleActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSEntitlementActivityCollectorOptions) Validate() error {
@@ -99,7 +132,10 @@ func (o *AWSEntitlementActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSAccountActivityCollectorOptions) Validate() error {
@@ -107,7 +143,32 @@ func (o *AWSAccountActivityCollectorOptions) Validate() error {
 		return nil
 	}
 
-	return o.AWSConnectionOptionsCore.Validate()
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
+}
+
+func (o *AWSOrganizationEntityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
+}
+
+func (o *AWSSecretEntityCollectorOptions) Validate() error {
+	if o == nil {
+		return nil
+	}
+
+	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
+		return err
+	}
+	return o.AWSScopeOptionsCore.Validate()
 }
 
 func (o *AWSAddUserToGroupActionOptions) Validate() error {

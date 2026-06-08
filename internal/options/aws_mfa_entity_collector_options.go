@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSMFAEntityCollectorOptions configures the AWS virtual MFA collector.
 type AWSMFAEntityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSMFAEntityCollectorOptions) GetDiscriminator() string {

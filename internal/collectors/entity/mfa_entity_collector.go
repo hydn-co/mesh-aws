@@ -13,6 +13,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type awsMFAEntityClient interface {
@@ -27,6 +28,7 @@ type AWSMFAEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSMFAEntityCollectorOptions, *connector.NoPayload]
 	client    awsMFAEntityClient
 	newClient awsMFAEntityClientFactory
+	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
 
@@ -69,12 +71,15 @@ func (c *AWSMFAEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSMFAEntityClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -91,6 +96,28 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 
 	mfasEmitted := 0
 	linksEmitted := 0
+
+	// MFA devices are an IAM (per-account) concern, so a single collector fans out
+	// across every member account in organization mode.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client awsMFAEntityClient, _ scope.Target) error {
+			c.client = client
+			return c.collectMFA(ctx, &mfasEmitted, &linksEmitted)
+		}); err != nil {
+		return err
+	}
+
+	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Finished AWS MFA entity collector",
+		"multi_factors_emitted", mfasEmitted,
+		"account_multi_factor_links_emitted", linksEmitted,
+	)
+	return nil
+}
+
+// collectMFA enumerates IAM virtual MFA devices for the current target account
+// and emits each device plus its account link. User ARNs are resolved per
+// account, so the lookup maps are rebuilt for every target.
+func (c *AWSMFAEntityCollector) collectMFA(ctx context.Context, mfasEmitted, linksEmitted *int) error {
 	userArnByID := map[string]string{}
 	userArnByName := map[string]string{}
 	userEnum := c.client.IAMUserEnumerator(ctx)
@@ -105,6 +132,7 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 	}); err != nil {
 		return fmt.Errorf("enumerate IAM users for MFA links: %w", err)
 	}
+
 	mfaEnum := c.client.IAMVirtualMFADeviceEnumerator(ctx)
 	if err := enumerators.ForEach(mfaEnum, func(device api.IAMVirtualMFADevice) error {
 		if err := ctx.Err(); err != nil {
@@ -120,7 +148,7 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 		if err := c.Emit(ctx, mfa); err != nil {
 			return fmt.Errorf("emit MFA device %s: %w", device.SerialNumber, err)
 		}
-		mfasEmitted++
+		(*mfasEmitted)++
 
 		if device.UserID == "" {
 			return nil
@@ -142,16 +170,11 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 		if err := c.Emit(ctx, link); err != nil {
 			return fmt.Errorf("emit MFA link %s/%s: %w", device.UserID, device.SerialNumber, err)
 		}
-		linksEmitted++
+		(*linksEmitted)++
 		return nil
 	}); err != nil {
 		return fmt.Errorf("enumerate IAM MFA devices: %w", err)
 	}
-
-	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Finished AWS MFA entity collector",
-		"multi_factors_emitted", mfasEmitted,
-		"account_multi_factor_links_emitted", linksEmitted,
-	)
 	return nil
 }
 

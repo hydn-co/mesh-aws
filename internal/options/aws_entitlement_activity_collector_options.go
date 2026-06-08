@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSEntitlementActivityCollectorOptions configures the AWS entitlement activity collector.
 type AWSEntitlementActivityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSEntitlementActivityCollectorOptions) GetDiscriminator() string {

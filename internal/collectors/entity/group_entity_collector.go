@@ -13,6 +13,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type awsGroupEntityClient interface {
@@ -30,6 +31,8 @@ type AWSGroupEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupEntityCollectorOptions, *connector.NoPayload]
 	client    awsGroupEntityClient
 	newClient awsGroupEntityClientFactory
+	resolver  *scope.Resolver
+	mgmtCreds *api.AWSCredentials
 	state     connectorutil.FeatureState
 }
 
@@ -72,12 +75,16 @@ func (c *AWSGroupEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSGroupEntityClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.mgmtCreds = creds
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -95,11 +102,24 @@ func (c *AWSGroupEntityCollector) Start(ctx context.Context) error {
 
 	groupsEmitted := 0
 
-	if err := c.emitIAMGroups(ctx, &groupsEmitted); err != nil {
+	// IAM groups are collected per account so a single collector fans out across
+	// every member account in organization mode.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client awsGroupEntityClient, _ scope.Target) error {
+			c.client = client
+			return c.emitIAMGroups(ctx, &groupsEmitted)
+		}); err != nil {
 		return err
 	}
 
+	// Identity Center groups live in the management/delegated account, so they are
+	// collected once using management credentials rather than per member account.
 	if identityStoreID := opts.GetIdentityStoreID(); identityStoreID != "" {
+		mgmtClient, err := c.newClient(c.mgmtCreds, opts.GetRegion(), opts.GetSessionToken())
+		if err != nil {
+			return fmt.Errorf("create AWS client: %w", err)
+		}
+		c.client = mgmtClient
 		if err := c.emitIdentityStoreGroups(ctx, identityStoreID, &groupsEmitted); err != nil {
 			return err
 		}

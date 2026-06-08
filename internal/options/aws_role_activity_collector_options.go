@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSRoleActivityCollectorOptions configures the AWS role activity collector.
 type AWSRoleActivityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSRoleActivityCollectorOptions) GetDiscriminator() string {

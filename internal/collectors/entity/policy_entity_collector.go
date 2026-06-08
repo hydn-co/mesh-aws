@@ -13,6 +13,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type awsPolicyEntityClient interface {
@@ -26,6 +27,7 @@ type AWSPolicyEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSPolicyEntityCollectorOptions, *connector.NoPayload]
 	client    awsPolicyEntityClient
 	newClient awsPolicyEntityClientFactory
+	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
 
@@ -68,12 +70,15 @@ func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSPolicyEntityClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -89,6 +94,30 @@ func (c *AWSPolicyEntityCollector) Start(ctx context.Context) error {
 	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Starting AWS policy entity collector")
 
 	policiesEmitted := 0
+
+	// IAM managed policies are collected per account so a single collector fans
+	// out across every member account in organization mode.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client awsPolicyEntityClient, _ scope.Target) error {
+			c.client = client
+			return c.collectPolicies(ctx, &policiesEmitted)
+		}); err != nil {
+		return err
+	}
+
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"Finished AWS policy entity collector",
+		"policies_emitted",
+		policiesEmitted,
+	)
+	return nil
+}
+
+// collectPolicies enumerates IAM managed policies for the current target account.
+func (c *AWSPolicyEntityCollector) collectPolicies(ctx context.Context, policiesEmitted *int) error {
 	policyEnum := c.client.IAMPolicyEnumerator(ctx, "Local")
 	if err := enumerators.ForEach(policyEnum, func(policy api.IAMPolicy) error {
 		if err := ctx.Err(); err != nil {
@@ -103,20 +132,11 @@ func (c *AWSPolicyEntityCollector) Start(ctx context.Context) error {
 		if err := c.Emit(ctx, entity); err != nil {
 			return fmt.Errorf("emit IAM policy %s: %w", policy.PolicyID, err)
 		}
-		policiesEmitted++
+		(*policiesEmitted)++
 		return nil
 	}); err != nil {
 		return fmt.Errorf("enumerate IAM policies: %w", err)
 	}
-
-	connectorutil.LogFeature(
-		ctx,
-		c.TypedFeatureContext,
-		slog.LevelInfo,
-		"Finished AWS policy entity collector",
-		"policies_emitted",
-		policiesEmitted,
-	)
 	return nil
 }
 

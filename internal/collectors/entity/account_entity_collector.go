@@ -14,6 +14,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type awsAccountEntityClient interface {
@@ -43,6 +44,8 @@ type AWSAccountEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSAccountEntityCollectorOptions, *connector.NoPayload]
 	client    awsAccountEntityClient
 	newClient awsAccountEntityClientFactory
+	resolver  *scope.Resolver
+	mgmtCreds *api.AWSCredentials
 	state     connectorutil.FeatureState
 }
 
@@ -85,12 +88,16 @@ func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSAccountEntityClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.mgmtCreds = creds
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -110,15 +117,31 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 	membershipsEmitted := 0
 	accountRolesEmitted := 0
 
-	if err := c.emitIAMAccountsAndMemberships(ctx, &accountsEmitted, &membershipsEmitted); err != nil {
+	// IAM users, roles, and the account itself are collected per account so a
+	// single collector fans out across every member account in organization mode.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client awsAccountEntityClient, target scope.Target) error {
+			c.client = client
+			if err := c.emitIAMAccountsAndMemberships(ctx, &accountsEmitted, &membershipsEmitted); err != nil {
+				return err
+			}
+			if err := c.emitRoleDerivedEntities(ctx, &accountsEmitted, &accountRolesEmitted); err != nil {
+				return err
+			}
+			return c.emitAccount(ctx, target, &accountsEmitted)
+		}); err != nil {
 		return err
 	}
 
-	if err := c.emitRoleDerivedEntities(ctx, &accountsEmitted, &accountRolesEmitted); err != nil {
-		return err
-	}
-
+	// Identity Center lives in the management/delegated account, not in member
+	// accounts, so its users, groups, and memberships are collected once using
+	// management credentials rather than per member account.
 	if identityStoreID := opts.GetIdentityStoreID(); identityStoreID != "" {
+		mgmtClient, err := c.newClient(c.mgmtCreds, opts.GetRegion(), opts.GetSessionToken())
+		if err != nil {
+			return fmt.Errorf("create AWS client: %w", err)
+		}
+		c.client = mgmtClient
 		if err := c.emitIdentityStoreAccountsAndMemberships(
 			ctx,
 			identityStoreID,
@@ -127,10 +150,6 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 		); err != nil {
 			return err
 		}
-	}
-
-	if err := c.emitManagementAccount(ctx, &accountsEmitted); err != nil {
-		return err
 	}
 
 	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Finished AWS account entity collector",
@@ -337,6 +356,29 @@ func (c *AWSAccountEntityCollector) emitRoleDerivedEntities(
 		return fmt.Errorf("enumerate IAM roles for account-derived entities: %w", err)
 	}
 
+	return nil
+}
+
+// emitAccount emits the AWS account itself as a root account. In single-account
+// mode it describes the organization to emit the management account (preserving
+// existing behavior); in organization mode it emits the member account resolved
+// for this target.
+func (c *AWSAccountEntityCollector) emitAccount(ctx context.Context, target scope.Target, accountsEmitted *int) error {
+	if target.AccountID == "" {
+		return c.emitManagementAccount(ctx, accountsEmitted)
+	}
+
+	account := entities.NewAccount()
+	account.AccountRef = fmt.Sprintf("arn:aws:iam::%s:root", target.AccountID)
+	account.Name = target.AccountID
+	account.DisplayName = target.AccountName
+	account.AccountType = types.AccountTypeRoot
+	account.Enabled = true
+
+	if err := c.Emit(ctx, account); err != nil {
+		return fmt.Errorf("emit account %s: %w", target.AccountID, err)
+	}
+	(*accountsEmitted)++
 	return nil
 }
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 // AWSLoginActivityCollector collects AWS Management Console and IAM Identity Center login activity.
@@ -22,6 +23,7 @@ type AWSLoginActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSLoginActivityCollectorOptions, *connector.NoPayload]
 	client    cloudTrailClient
 	newClient cloudTrailClientFactory
+	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
 
@@ -57,12 +59,15 @@ func (c *AWSLoginActivityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultCloudTrailClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -98,6 +103,37 @@ func (c *AWSLoginActivityCollector) Start(ctx context.Context) error {
 		}
 	}
 
+	emitted := 0
+	// CloudTrail is per-account, so a single collector fans out across every
+	// member account in organization mode. Each account is queried from the same
+	// resume cursor; duplicate event refs across accounts are de-duplicated by the
+	// catalog's distinct identity.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client cloudTrailClient, _ scope.Target) error {
+			c.client = client
+			return c.collectLoginEvents(ctx, startTime, lastEventRef, &emitted)
+		}); err != nil {
+		return err
+	}
+
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"Finished AWS login activity collector",
+		"emitted",
+		emitted,
+	)
+	return nil
+}
+
+// collectLoginEvents collects and emits login activity for the current target account.
+func (c *AWSLoginActivityCollector) collectLoginEvents(
+	ctx context.Context,
+	startTime *time.Time,
+	lastEventRef string,
+	emitted *int,
+) error {
 	eventNames := []string{"ConsoleLogin", "UserAuthentication", "CredentialVerification", "LogoutUser"}
 	cloudTrailEvents, err := collectMergedCloudTrailEvents(ctx, c.client, eventNames, startTime)
 	if err != nil {
@@ -105,7 +141,6 @@ func (c *AWSLoginActivityCollector) Start(ctx context.Context) error {
 	}
 	cloudTrailEvents = resumeFilteredCloudTrailEvents(cloudTrailEvents, startTime, lastEventRef)
 
-	emitted := 0
 	for _, event := range cloudTrailEvents {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -132,17 +167,8 @@ func (c *AWSLoginActivityCollector) Start(ctx context.Context) error {
 		if err := c.Emit(ctx, activityEvent); err != nil {
 			return fmt.Errorf("emit login activity %T: %w", activityEvent, err)
 		}
-		emitted++
+		(*emitted)++
 	}
-
-	connectorutil.LogFeature(
-		ctx,
-		c.TypedFeatureContext,
-		slog.LevelInfo,
-		"Finished AWS login activity collector",
-		"emitted",
-		emitted,
-	)
 	return nil
 }
 

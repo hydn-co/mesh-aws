@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSCognitoUserPoolAdminActivityCollectorOptions configures the AWS Cognito user pool admin activity collector.
 type AWSCognitoUserPoolAdminActivityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSCognitoUserPoolAdminActivityCollectorOptions) GetDiscriminator() string {

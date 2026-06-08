@@ -14,6 +14,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 // AWSGroupActivityCollector collects AWS group creation and deletion activity.
@@ -21,6 +22,7 @@ type AWSGroupActivityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupActivityCollectorOptions, *connector.NoPayload]
 	client    cloudTrailClient
 	newClient cloudTrailClientFactory
+	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
 
@@ -56,12 +58,15 @@ func (c *AWSGroupActivityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultCloudTrailClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -97,6 +102,37 @@ func (c *AWSGroupActivityCollector) Start(ctx context.Context) error {
 		}
 	}
 
+	emitted := 0
+	// CloudTrail is per-account, so a single collector fans out across every
+	// member account in organization mode. Each account is queried from the same
+	// resume cursor; duplicate event refs across accounts are de-duplicated by the
+	// catalog's distinct identity.
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client cloudTrailClient, _ scope.Target) error {
+			c.client = client
+			return c.collectGroupEvents(ctx, startTime, lastEventRef, &emitted)
+		}); err != nil {
+		return err
+	}
+
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"Finished AWS group activity collector",
+		"emitted",
+		emitted,
+	)
+	return nil
+}
+
+// collectGroupEvents collects and emits group activity for the current target account.
+func (c *AWSGroupActivityCollector) collectGroupEvents(
+	ctx context.Context,
+	startTime *time.Time,
+	lastEventRef string,
+	emitted *int,
+) error {
 	eventNames := []string{"CreateGroup", "DeleteGroup"}
 	cloudTrailEvents, err := collectMergedCloudTrailEvents(ctx, c.client, eventNames, startTime)
 	if err != nil {
@@ -104,7 +140,6 @@ func (c *AWSGroupActivityCollector) Start(ctx context.Context) error {
 	}
 	cloudTrailEvents = resumeFilteredCloudTrailEvents(cloudTrailEvents, startTime, lastEventRef)
 
-	emitted := 0
 	for _, event := range cloudTrailEvents {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -131,17 +166,8 @@ func (c *AWSGroupActivityCollector) Start(ctx context.Context) error {
 		if err := c.Emit(ctx, activityEvent); err != nil {
 			return fmt.Errorf("emit group activity %T: %w", activityEvent, err)
 		}
-		emitted++
+		(*emitted)++
 	}
-
-	connectorutil.LogFeature(
-		ctx,
-		c.TypedFeatureContext,
-		slog.LevelInfo,
-		"Finished AWS group activity collector",
-		"emitted",
-		emitted,
-	)
 	return nil
 }
 

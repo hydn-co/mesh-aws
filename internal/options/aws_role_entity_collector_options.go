@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSRoleEntityCollectorOptions configures the AWS role collector.
 type AWSRoleEntityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 
 	CollectInlinePolicies bool `json:"collect_inline_policies,omitempty" title:"Collect Inline Policies" description:"Also collect role-embedded inline policies as permissions. Adds an extra IAM call per role; managed policies are always collected."`
 }

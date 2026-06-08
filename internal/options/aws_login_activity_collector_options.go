@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSLoginActivityCollectorOptions configures the AWS login activity collector.
 type AWSLoginActivityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSLoginActivityCollectorOptions) GetDiscriminator() string {

@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSPolicyEntityCollectorOptions configures the AWS policy collector.
 type AWSPolicyEntityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSPolicyEntityCollectorOptions) GetDiscriminator() string {

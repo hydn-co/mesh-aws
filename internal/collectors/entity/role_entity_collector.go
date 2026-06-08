@@ -14,6 +14,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type awsRoleEntityClient interface {
@@ -29,6 +30,7 @@ type AWSRoleEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSRoleEntityCollectorOptions, *connector.NoPayload]
 	client    awsRoleEntityClient
 	newClient awsRoleEntityClientFactory
+	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
 
@@ -71,12 +73,15 @@ func (c *AWSRoleEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSRoleEntityClientFactory
 	}
-	client, err := c.newClient(creds, opts.GetRegion(), opts.GetSessionToken())
-	if err != nil {
-		return fmt.Errorf("create AWS client: %w", err)
-	}
-
-	c.client = client
+	c.resolver = scope.NewResolver(
+		&opts.AWSScopeOptionsCore,
+		opts.GetRegion(),
+		opts.GetSessionToken(),
+		creds,
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	)
 	c.state.MarkReady()
 	return nil
 }
@@ -95,8 +100,41 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 	counts := rolePermissionCounts{}
 	// seenResources dedups derived Resource entities across the whole run: a
 	// resource (e.g. "s3") is typically inferred from many permissions, but the
-	// catalog only needs it emitted once.
+	// catalog only needs it emitted once. IAM is global per account, so a single
+	// target per account (the resolver passes nil/global region) is collected.
 	seenResources := map[string]struct{}{}
+
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
+		func(ctx context.Context, client awsRoleEntityClient, _ scope.Target) error {
+			c.client = client
+			return c.collectRoles(ctx, collectInline, seenResources, &counts)
+		}); err != nil {
+		return err
+	}
+
+	connectorutil.LogFeature(
+		ctx,
+		c.TypedFeatureContext,
+		slog.LevelInfo,
+		"Finished AWS role entity collector",
+		"roles_emitted",
+		counts.roles,
+		"permissions_emitted",
+		counts.permissions,
+		"role_permissions_emitted",
+		counts.rolePermissions,
+	)
+	return nil
+}
+
+// collectRoles enumerates IAM roles for the current target account and emits role
+// and permission entities. It is invoked once per resolved target.
+func (c *AWSRoleEntityCollector) collectRoles(
+	ctx context.Context,
+	collectInline bool,
+	seenResources map[string]struct{},
+	counts *rolePermissionCounts,
+) error {
 	roleEnum := c.client.IAMRoleEnumerator(ctx)
 	if err := enumerators.ForEach(roleEnum, func(role api.IAMRole) error {
 		if err := ctx.Err(); err != nil {
@@ -113,23 +151,10 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 		}
 		counts.roles++
 
-		return c.emitRolePermissions(ctx, role, collectInline, seenResources, &counts)
+		return c.emitRolePermissions(ctx, role, collectInline, seenResources, counts)
 	}); err != nil {
 		return fmt.Errorf("enumerate IAM roles: %w", err)
 	}
-
-	connectorutil.LogFeature(
-		ctx,
-		c.TypedFeatureContext,
-		slog.LevelInfo,
-		"Finished AWS role entity collector",
-		"roles_emitted",
-		counts.roles,
-		"permissions_emitted",
-		counts.permissions,
-		"role_permissions_emitted",
-		counts.rolePermissions,
-	)
 	return nil
 }
 

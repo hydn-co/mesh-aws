@@ -5,6 +5,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 // AWSGroupActivityCollectorOptions configures the AWS group activity collector.
 type AWSGroupActivityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
+	AWSScopeOptionsCore      `json:",inline"`
 }
 
 func (*AWSGroupActivityCollectorOptions) GetDiscriminator() string {

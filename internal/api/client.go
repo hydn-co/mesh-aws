@@ -68,24 +68,42 @@ func NewClient(creds *AWSCredentials, region, sessionToken string) (*Client, err
 func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte, error) {
 	params["Version"] = iamVersion
 
+	data, status, err := c.formPost(ctx, iamEndpoint, iamService, iamRegion, params)
+	if err != nil {
+		return nil, err
+	}
+	if status != http.StatusOK {
+		return nil, parseIAMError(data, status)
+	}
+	return data, nil
+}
+
+// formPost builds, signs (SigV4), and sends a POST to an AWS Query (form-encoded)
+// API such as IAM or STS. It returns the raw response body and HTTP status code;
+// callers map a non-200 status to a service-specific error. The caller must set
+// params["Action"] and params["Version"] before calling.
+func (c *Client) formPost(
+	ctx context.Context,
+	endpoint, service, region string,
+	params map[string]string,
+) ([]byte, int, error) {
 	v := url.Values{}
 	for k, val := range params {
 		v.Set(k, val)
 	}
-	body := v.Encode()
-	bodyBytes := []byte(body)
+	bodyBytes := []byte(v.Encode())
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, iamEndpoint, bytes.NewReader(bodyBytes))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(bodyBytes))
 	if err != nil {
-		return nil, fmt.Errorf("create IAM request: %w", err)
+		return nil, 0, fmt.Errorf("create %s request: %w", service, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	c.sign(req, iamService, iamRegion, bodyBytes)
+	c.sign(req, service, region, bodyBytes)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("execute IAM request: %w", err)
+		return nil, 0, fmt.Errorf("execute %s request: %w", service, err)
 	}
 	defer func() {
 		_ = resp.Body.Close()
@@ -93,13 +111,10 @@ func (c *Client) iamPost(ctx context.Context, params map[string]string) ([]byte,
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read IAM response body: %w", err)
+		return nil, resp.StatusCode, fmt.Errorf("read %s response body: %w", service, err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, parseIAMError(data, resp.StatusCode)
-	}
-	return data, nil
+	return data, resp.StatusCode, nil
 }
 
 // cloudtrailPost sends a signed POST to the CloudTrail JSON API.

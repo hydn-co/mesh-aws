@@ -6,6 +6,7 @@ import "github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
 type AWSAccountEntityCollectorOptions struct {
 	AWSConnectionOptionsCore    `json:",inline"`
 	AWSIdentityStoreOptionsCore `json:",inline"`
+	AWSScopeOptionsCore         `json:",inline"`
 }
 
 func (*AWSAccountEntityCollectorOptions) GetDiscriminator() string {
