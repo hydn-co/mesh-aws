@@ -1,0 +1,105 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >-
+  Cross-account discovery role assumed by the Hydden mesh-aws connector in
+  organization mode. Deploy this template to every member account (typically via a
+  service-managed CloudFormation StackSet from the management/delegated-admin
+  account) so the connector can sts:AssumeRole into each account and collect
+  identity, activity, and Secrets Manager metadata. The role grants read-only
+  access and never permits reading secret values.
+
+Parameters:
+  CollectorPrincipalArn:
+    Type: String
+    AllowedPattern: "^arn:aws[a-zA-Z-]*:iam::[0-9]{12}:(user/.+|role/.+|root)$"
+    Description: >-
+      ARN of the IAM user or role in the management/delegated account that owns the
+      access key/secret configured in the connector (the identity that calls
+      sts:AssumeRole). Find it with `aws sts get-caller-identity` using the
+      connector's keys, e.g. arn:aws:iam::111111111111:user/mesh-collector. You may
+      instead pass the account root arn:aws:iam::111111111111:root to trust any
+      suitably-permissioned principal in that account.
+
+  DiscoveryRoleName:
+    Type: String
+    Default: HyddenDiscoveryRole
+    MinLength: 1
+    MaxLength: 64
+    AllowedPattern: "^[A-Za-z0-9+=,.@_-]+$"
+    Description: >-
+      Name of the role to create in each member account. Must match the
+      connector's `assume_role_name` option so it can assume the predictable ARN
+      arn:aws:iam::<account-id>:role/<DiscoveryRoleName>.
+
+  ExternalId:
+    Type: String
+    Default: ""
+    Description: >-
+      Optional sts:ExternalId. When set, the connector must send the same value via
+      its `external_id` option. Leave blank to omit the trust-policy condition.
+
+Conditions:
+  HasExternalId: !Not [!Equals [!Ref ExternalId, ""]]
+
+Resources:
+  DiscoveryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref DiscoveryRoleName
+      Description: Read-only role assumed by the Hydden mesh-aws connector for organization-wide discovery.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowHyddenCollectorAssumeRole
+            Effect: Allow
+            Principal:
+              AWS: !Ref CollectorPrincipalArn
+            Action: sts:AssumeRole
+            Condition: !If
+              - HasExternalId
+              - StringEquals:
+                  sts:ExternalId: !Ref ExternalId
+              - !Ref AWS::NoValue
+      Policies:
+        - PolicyName: HyddenDiscoveryReadOnly
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              # IAM is global; identity collectors (accounts, groups, roles,
+              # policies, MFA) read users/groups/roles/policies/keys/MFA devices.
+              - Sid: IAMDiscovery
+                Effect: Allow
+                Action:
+                  - iam:Get*
+                  - iam:List*
+                  - iam:GenerateCredentialReport
+                  - iam:GetCredentialReport
+                Resource: "*"
+              # Activity collectors read sign-in / lifecycle events.
+              - Sid: CloudTrailDiscovery
+                Effect: Allow
+                Action:
+                  - cloudtrail:LookupEvents
+                Resource: "*"
+              # Secret collector reads metadata only — never GetSecretValue.
+              - Sid: SecretsMetadataDiscovery
+                Effect: Allow
+                Action:
+                  - secretsmanager:ListSecrets
+                  - secretsmanager:DescribeSecret
+                  - secretsmanager:GetResourcePolicy
+                  - secretsmanager:ListSecretVersionIds
+                Resource: "*"
+              - Sid: STSIdentity
+                Effect: Allow
+                Action:
+                  - sts:GetCallerIdentity
+                Resource: "*"
+
+Outputs:
+  DiscoveryRoleArn:
+    Description: ARN of the discovery role created in this account.
+    Value: !GetAtt DiscoveryRole.Arn
+  DiscoveryRoleName:
+    Description: Name of the discovery role (matches the connector's assume_role_name).
+    Value: !Ref DiscoveryRoleName

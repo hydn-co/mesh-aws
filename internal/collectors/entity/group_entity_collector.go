@@ -29,11 +29,12 @@ type awsGroupEntityClientFactory func(creds *api.AWSCredentials, region, session
 // AWSGroupEntityCollector collects AWS group entities from IAM and Identity Store.
 type AWSGroupEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSGroupEntityCollectorOptions, *connector.NoPayload]
-	client    awsGroupEntityClient
-	newClient awsGroupEntityClientFactory
-	resolver  *scope.Resolver
-	mgmtCreds *api.AWSCredentials
-	state     connectorutil.FeatureState
+	client       awsGroupEntityClient
+	newClient    awsGroupEntityClientFactory
+	resolver     *scope.Resolver
+	mgmtCreds    *api.AWSCredentials
+	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	state        connectorutil.FeatureState
 }
 
 // NewAWSGroupEntityCollector constructs the collector with the given feature context.
@@ -76,14 +77,17 @@ func (c *AWSGroupEntityCollector) Init(ctx context.Context) error {
 		c.newClient = defaultAWSGroupEntityClientFactory
 	}
 	c.mgmtCreds = creds
+	resolverOpts := append([]scope.Option{
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	}, c.resolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
 		opts.GetSessionToken(),
 		creds,
-		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
-			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
-		}),
+		resolverOpts...,
 	)
 	c.state.MarkReady()
 	return nil

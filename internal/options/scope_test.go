@@ -2,13 +2,16 @@ package options
 
 import "testing"
 
-func TestShouldDefaultToSingleModeWhenModeEmpty(t *testing.T) {
+func TestShouldRejectEmptyModeWithoutImplicitDefault(t *testing.T) {
 	opts := &AWSScopeOptionsCore{}
-	if got := opts.GetMode(); got != ModeSingle {
-		t.Fatalf("GetMode() = %q, want %q", got, ModeSingle)
+	if got := opts.GetMode(); got != "" {
+		t.Fatalf("GetMode() = %q, want empty string (no implicit default)", got)
 	}
 	if opts.IsOrganizationMode() {
 		t.Fatal("IsOrganizationMode() = true, want false for empty mode")
+	}
+	if err := opts.Validate(); err == nil {
+		t.Fatal("Validate() = nil, want error for empty mode (mode is required)")
 	}
 }
 

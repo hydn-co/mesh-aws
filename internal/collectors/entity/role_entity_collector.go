@@ -28,10 +28,11 @@ type awsRoleEntityClientFactory func(creds *api.AWSCredentials, region, sessionT
 // AWSRoleEntityCollector collects AWS IAM role entities.
 type AWSRoleEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSRoleEntityCollectorOptions, *connector.NoPayload]
-	client    awsRoleEntityClient
-	newClient awsRoleEntityClientFactory
-	resolver  *scope.Resolver
-	state     connectorutil.FeatureState
+	client       awsRoleEntityClient
+	newClient    awsRoleEntityClientFactory
+	resolver     *scope.Resolver
+	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	state        connectorutil.FeatureState
 }
 
 // NewAWSRoleEntityCollector constructs the collector with the given feature context.
@@ -73,14 +74,17 @@ func (c *AWSRoleEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSRoleEntityClientFactory
 	}
+	resolverOpts := append([]scope.Option{
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	}, c.resolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
 		opts.GetSessionToken(),
 		creds,
-		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
-			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
-		}),
+		resolverOpts...,
 	)
 	c.state.MarkReady()
 	return nil

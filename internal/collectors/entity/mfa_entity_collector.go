@@ -26,10 +26,11 @@ type awsMFAEntityClientFactory func(creds *api.AWSCredentials, region, sessionTo
 // AWSMFAEntityCollector collects AWS IAM MFA entities and account associations.
 type AWSMFAEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSMFAEntityCollectorOptions, *connector.NoPayload]
-	client    awsMFAEntityClient
-	newClient awsMFAEntityClientFactory
-	resolver  *scope.Resolver
-	state     connectorutil.FeatureState
+	client       awsMFAEntityClient
+	newClient    awsMFAEntityClientFactory
+	resolver     *scope.Resolver
+	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	state        connectorutil.FeatureState
 }
 
 // NewAWSMFAEntityCollector constructs the collector with the given feature context.
@@ -71,14 +72,17 @@ func (c *AWSMFAEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSMFAEntityClientFactory
 	}
+	resolverOpts := append([]scope.Option{
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	}, c.resolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
 		opts.GetSessionToken(),
 		creds,
-		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
-			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
-		}),
+		resolverOpts...,
 	)
 	c.state.MarkReady()
 	return nil

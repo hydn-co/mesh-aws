@@ -42,11 +42,12 @@ type awsAccountEntityClientFactory func(creds *api.AWSCredentials, region, sessi
 // AWSAccountEntityCollector collects AWS account-related entities and membership links.
 type AWSAccountEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSAccountEntityCollectorOptions, *connector.NoPayload]
-	client    awsAccountEntityClient
-	newClient awsAccountEntityClientFactory
-	resolver  *scope.Resolver
-	mgmtCreds *api.AWSCredentials
-	state     connectorutil.FeatureState
+	client       awsAccountEntityClient
+	newClient    awsAccountEntityClientFactory
+	resolver     *scope.Resolver
+	mgmtCreds    *api.AWSCredentials
+	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	state        connectorutil.FeatureState
 }
 
 // NewAWSAccountEntityCollector constructs the collector with the given feature context.
@@ -89,14 +90,17 @@ func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
 		c.newClient = defaultAWSAccountEntityClientFactory
 	}
 	c.mgmtCreds = creds
+	resolverOpts := append([]scope.Option{
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	}, c.resolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
 		opts.GetSessionToken(),
 		creds,
-		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
-			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
-		}),
+		resolverOpts...,
 	)
 	c.state.MarkReady()
 	return nil

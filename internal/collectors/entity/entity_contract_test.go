@@ -19,6 +19,7 @@ import (
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
+	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
 type captureEntityEmitter struct {
@@ -203,6 +204,78 @@ func (fakeAWSContractClient) IAMVirtualMFADeviceEnumerator(
 	}})
 }
 
+// fakeOrgClient backs the resolver in organization mode with a two-account
+// organization: the management account (collected with management credentials)
+// and one member account reached via AssumeRole.
+type fakeOrgClient struct{}
+
+func (fakeOrgClient) DescribeOrganization(_ context.Context) (*api.Organization, error) {
+	return &api.Organization{
+		MasterAccountID:    "123456789012",
+		MasterAccountArn:   "arn:aws:organizations::123456789012:account/o-example/123456789012",
+		MasterAccountEmail: "root@example.com",
+	}, nil
+}
+
+func (fakeOrgClient) OrganizationAccountEnumerator(_ context.Context) enumerators.Enumerator[api.Account] {
+	return sliceEnumerator([]api.Account{{
+		ID:     "123456789012",
+		Name:   "management",
+		Status: api.AccountStatusActive,
+	}, {
+		ID:     "210987654321",
+		Name:   "member",
+		Status: api.AccountStatusActive,
+	}})
+}
+
+func (fakeOrgClient) OrganizationAccountsForParentEnumerator(
+	_ context.Context,
+	_ string,
+) enumerators.Enumerator[api.Account] {
+	panic("unexpected OU account enumeration without configured organizational unit IDs")
+}
+
+func (fakeOrgClient) OrganizationalUnitsForParentEnumerator(
+	_ context.Context,
+	_ string,
+) enumerators.Enumerator[api.OrganizationalUnit] {
+	panic("unexpected OU enumeration without configured organizational unit IDs")
+}
+
+func (fakeOrgClient) AssumeRole(
+	_ context.Context,
+	roleArn, _, _ string,
+) (*api.AssumedCredentials, error) {
+	if roleArn != "arn:aws:iam::210987654321:role/HyddenDiscoveryRole" {
+		panic("unexpected assume role arn: " + roleArn)
+	}
+	return &api.AssumedCredentials{
+		AccessKeyID:     "assumed-access-key-id",
+		SecretAccessKey: "assumed-secret-access-key",
+		SessionToken:    "assumed-session-token",
+	}, nil
+}
+
+// contractModes are the collection modes every entity collector contract test runs under.
+var contractModes = []string{options.ModeSingle, options.ModeOrganization}
+
+func contractScopeOptions(mode string) options.AWSScopeOptionsCore {
+	scopeOpts := options.AWSScopeOptionsCore{Mode: mode}
+	if mode == options.ModeOrganization {
+		scopeOpts.AssumeRoleName = "HyddenDiscoveryRole"
+	}
+	return scopeOpts
+}
+
+func contractResolverOpts() []scope.Option {
+	return []scope.Option{
+		scope.WithOrgClientFactory(func(_ *api.AWSCredentials, _, _ string) (scope.OrgClient, error) {
+			return fakeOrgClient{}, nil
+		}),
+	}
+}
+
 func sliceEnumerator[T any](items []T) enumerators.Enumerator[T] {
 	emitted := false
 	return enumerators.PageItemEnumerator(func() ([]T, bool, error) {
@@ -215,165 +288,217 @@ func sliceEnumerator[T any](items []T) enumerators.Enumerator[T] {
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenAccountCollectorRunsWithInjectedClient(t *testing.T) {
-	emitter := &captureEntityEmitter{}
-	collector := &AWSAccountEntityCollector{
-		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSAccountEntityCollectorOptions{
-			AWSConnectionOptionsCore:    options.AWSConnectionOptionsCore{Region: "us-west-2"},
-			AWSIdentityStoreOptionsCore: options.AWSIdentityStoreOptionsCore{IdentityStoreID: "d-1234567890"},
-		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsAccountEntityClient, error) {
-			return fakeAWSContractClient{}, nil
-		},
-	}
+	testCases := []struct {
+		mode             string
+		expectedRootRefs []string
+		expectedTargets  int
+	}{{
+		mode:             options.ModeSingle,
+		expectedRootRefs: []string{"arn:aws:organizations::123456789012:account/o-example/123456789012"},
+		expectedTargets:  1,
+	}, {
+		mode:             options.ModeOrganization,
+		expectedRootRefs: []string{"arn:aws:iam::123456789012:root", "arn:aws:iam::210987654321:root"},
+		expectedTargets:  2,
+	}}
 
-	require.NoError(t, collector.Init(t.Context()))
-	require.NoError(t, collector.Start(t.Context()))
-	require.NoError(t, collector.Stop(t.Context()))
+	for _, tc := range testCases {
+		t.Run(tc.mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSAccountEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSAccountEntityCollectorOptions{
+					AWSConnectionOptionsCore:    options.AWSConnectionOptionsCore{Region: "us-west-2"},
+					AWSScopeOptionsCore:         contractScopeOptions(tc.mode),
+					AWSIdentityStoreOptionsCore: options.AWSIdentityStoreOptionsCore{IdentityStoreID: "d-1234567890"},
+				}),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsAccountEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
 
-	assertEmittedEntityContract(t, emitter.emitted, []any{
-		&entities.Account{},
-		&entities.GroupMember{},
-		&entities.AccountRole{},
-	}, (&options.AWSAccountEntityCollectorOptions{}).GetSpaces())
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
 
-	servicePrincipalCount := 0
-	humanAssumableRoleCount := 0
-	seenExpectedRefs := map[string]bool{
-		"arn:aws:iam::123456789012:user/alice":                               false,
-		"arn:aws:iam::123456789012:role/admins":                              false,
-		"idstore-user-1":                                                     false,
-		"arn:aws:organizations::123456789012:account/o-example/123456789012": false,
-	}
-	for _, emitted := range emitter.emitted {
-		account, ok := emitted.(*entities.Account)
-		if !ok {
-			continue
-		}
-		if _, ok := seenExpectedRefs[account.AccountRef]; ok {
-			seenExpectedRefs[account.AccountRef] = true
-		}
-		if account.AccountRef == "arn:aws:iam::123456789012:role/admins" {
-			require.Equal(t, types.AccountTypeServicePrincipal, account.AccountType)
-			require.True(t, account.Enabled)
-			require.Equal(t, "Admins role", account.Description)
-			servicePrincipalCount++
-		}
-		if account.AccountRef == "arn:aws:iam::123456789012:role/human-assumable" {
-			humanAssumableRoleCount++
-		}
-		if account.AccountRef == "arn:aws:iam::123456789012:user/alice" {
-			require.Empty(t, account.Description)
-		}
-		if account.AccountRef == "idstore-user-1" {
-			require.Empty(t, account.Description)
-		}
-		if account.AccountRef == "arn:aws:organizations::123456789012:account/o-example/123456789012" {
-			require.Empty(t, account.Description)
-		}
-	}
+			assertEmittedEntityContract(t, emitter.emitted, []any{
+				&entities.Account{},
+				&entities.GroupMember{},
+				&entities.AccountRole{},
+			}, (&options.AWSAccountEntityCollectorOptions{}).GetSpaces())
 
-	require.Equal(t, 1, servicePrincipalCount)
-	require.Zero(t, humanAssumableRoleCount)
-	for ref, seen := range seenExpectedRefs {
-		require.Truef(t, seen, "expected emitted account ref %s", ref)
-	}
+			rootRefs := map[string]bool{}
+			for _, ref := range tc.expectedRootRefs {
+				rootRefs[ref] = true
+			}
 
-	accountRoles := make([]*entities.AccountRole, 0)
-	for _, emitted := range emitter.emitted {
-		if accountRole, ok := emitted.(*entities.AccountRole); ok {
-			accountRoles = append(accountRoles, accountRole)
-		}
+			servicePrincipalCount := 0
+			humanAssumableRoleCount := 0
+			seenExpectedRefs := map[string]bool{
+				"arn:aws:iam::123456789012:user/alice":  false,
+				"arn:aws:iam::123456789012:role/admins": false,
+				"idstore-user-1":                        false,
+			}
+			for _, ref := range tc.expectedRootRefs {
+				seenExpectedRefs[ref] = false
+			}
+			for _, emitted := range emitter.emitted {
+				account, ok := emitted.(*entities.Account)
+				if !ok {
+					continue
+				}
+				if _, ok := seenExpectedRefs[account.AccountRef]; ok {
+					seenExpectedRefs[account.AccountRef] = true
+				}
+				if account.AccountRef == "arn:aws:iam::123456789012:role/admins" {
+					require.Equal(t, types.AccountTypeServicePrincipal, account.AccountType)
+					require.True(t, account.Enabled)
+					require.Equal(t, "Admins role", account.Description)
+					servicePrincipalCount++
+				}
+				if account.AccountRef == "arn:aws:iam::123456789012:role/human-assumable" {
+					humanAssumableRoleCount++
+				}
+				if account.AccountRef == "arn:aws:iam::123456789012:user/alice" ||
+					account.AccountRef == "idstore-user-1" {
+					require.Empty(t, account.Description)
+				}
+				if rootRefs[account.AccountRef] {
+					require.Empty(t, account.Description)
+					require.Equal(t, types.AccountTypeRoot, account.AccountType)
+				}
+			}
+
+			require.Equal(t, tc.expectedTargets, servicePrincipalCount)
+			require.Zero(t, humanAssumableRoleCount)
+			for ref, seen := range seenExpectedRefs {
+				require.Truef(t, seen, "expected emitted account ref %s", ref)
+			}
+
+			accountRoles := make([]*entities.AccountRole, 0)
+			for _, emitted := range emitter.emitted {
+				if accountRole, ok := emitted.(*entities.AccountRole); ok {
+					accountRoles = append(accountRoles, accountRole)
+				}
+			}
+			require.Len(t, accountRoles, tc.expectedTargets)
+			for _, accountRole := range accountRoles {
+				require.Equal(t, "arn:aws:iam::123456789012:user/alice", accountRole.AccountRef)
+				require.Equal(t, "role-2", accountRole.RoleRef)
+			}
+		})
 	}
-	require.Len(t, accountRoles, 1)
-	require.Equal(t, "arn:aws:iam::123456789012:user/alice", accountRoles[0].AccountRef)
-	require.Equal(t, "role-2", accountRoles[0].RoleRef)
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenGroupCollectorRunsWithInjectedClient(t *testing.T) {
-	emitter := &captureEntityEmitter{}
-	collector := &AWSGroupEntityCollector{
-		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSGroupEntityCollectorOptions{
-			AWSConnectionOptionsCore:    options.AWSConnectionOptionsCore{Region: "us-west-2"},
-			AWSIdentityStoreOptionsCore: options.AWSIdentityStoreOptionsCore{IdentityStoreID: "d-1234567890"},
-		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsGroupEntityClient, error) {
-			return fakeAWSContractClient{}, nil
-		},
+	for _, mode := range contractModes {
+		t.Run(mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSGroupEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSGroupEntityCollectorOptions{
+					AWSConnectionOptionsCore:    options.AWSConnectionOptionsCore{Region: "us-west-2"},
+					AWSScopeOptionsCore:         contractScopeOptions(mode),
+					AWSIdentityStoreOptionsCore: options.AWSIdentityStoreOptionsCore{IdentityStoreID: "d-1234567890"},
+				}),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsGroupEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
+
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
+
+			assertEmittedEntityContract(t, emitter.emitted, []any{
+				&entities.Group{},
+			}, (&options.AWSGroupEntityCollectorOptions{}).GetSpaces())
+		})
 	}
-
-	require.NoError(t, collector.Init(t.Context()))
-	require.NoError(t, collector.Start(t.Context()))
-	require.NoError(t, collector.Stop(t.Context()))
-
-	assertEmittedEntityContract(t, emitter.emitted, []any{
-		&entities.Group{},
-	}, (&options.AWSGroupEntityCollectorOptions{}).GetSpaces())
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenRoleCollectorRunsWithInjectedClient(t *testing.T) {
-	emitter := &captureEntityEmitter{}
-	collector := &AWSRoleEntityCollector{
-		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSRoleEntityCollectorOptions{
-			AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
-			CollectInlinePolicies:    true,
-		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsRoleEntityClient, error) {
-			return fakeAWSContractClient{}, nil
-		},
+	for _, mode := range contractModes {
+		t.Run(mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSRoleEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSRoleEntityCollectorOptions{
+					AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
+					AWSScopeOptionsCore:      contractScopeOptions(mode),
+					CollectInlinePolicies:    true,
+				}),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsRoleEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
+
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
+
+			assertEmittedEntityContract(t, emitter.emitted, []any{
+				&entities.Role{},
+				&entities.Permission{},
+				&entities.RolePermission{},
+				&entities.Resource{},
+				&entities.ResourcePermission{},
+			}, (&options.AWSRoleEntityCollectorOptions{}).GetSpaces())
+		})
 	}
-
-	require.NoError(t, collector.Init(t.Context()))
-	require.NoError(t, collector.Start(t.Context()))
-	require.NoError(t, collector.Stop(t.Context()))
-
-	assertEmittedEntityContract(t, emitter.emitted, []any{
-		&entities.Role{},
-		&entities.Permission{},
-		&entities.RolePermission{},
-		&entities.Resource{},
-		&entities.ResourcePermission{},
-	}, (&options.AWSRoleEntityCollectorOptions{}).GetSpaces())
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenPolicyCollectorRunsWithInjectedClient(t *testing.T) {
-	emitter := &captureEntityEmitter{}
-	collector := &AWSPolicyEntityCollector{
-		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSPolicyEntityCollectorOptions{
-			AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
-		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsPolicyEntityClient, error) {
-			return fakeAWSContractClient{}, nil
-		},
+	for _, mode := range contractModes {
+		t.Run(mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSPolicyEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSPolicyEntityCollectorOptions{
+					AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
+					AWSScopeOptionsCore:      contractScopeOptions(mode),
+				}),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsPolicyEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
+
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
+
+			assertEmittedEntityContract(t, emitter.emitted, []any{
+				&entities.Policy{},
+			}, (&options.AWSPolicyEntityCollectorOptions{}).GetSpaces())
+		})
 	}
-
-	require.NoError(t, collector.Init(t.Context()))
-	require.NoError(t, collector.Start(t.Context()))
-	require.NoError(t, collector.Stop(t.Context()))
-
-	assertEmittedEntityContract(t, emitter.emitted, []any{
-		&entities.Policy{},
-	}, (&options.AWSPolicyEntityCollectorOptions{}).GetSpaces())
 }
 
 func TestShouldOnlyEmitDeclaredEntityTypesWhenMFACollectorRunsWithInjectedClient(t *testing.T) {
-	emitter := &captureEntityEmitter{}
-	collector := &AWSMFAEntityCollector{
-		TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSMFAEntityCollectorOptions{
-			AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
-		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsMFAEntityClient, error) {
-			return fakeAWSContractClient{}, nil
-		},
+	for _, mode := range contractModes {
+		t.Run(mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSMFAEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(t, emitter, &options.AWSMFAEntityCollectorOptions{
+					AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
+					AWSScopeOptionsCore:      contractScopeOptions(mode),
+				}),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsMFAEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
+
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
+
+			assertEmittedEntityContract(t, emitter.emitted, []any{
+				&entities.MultiFactor{},
+				&entities.AccountMultiFactor{},
+			}, (&options.AWSMFAEntityCollectorOptions{}).GetSpaces())
+		})
 	}
-
-	require.NoError(t, collector.Init(t.Context()))
-	require.NoError(t, collector.Start(t.Context()))
-	require.NoError(t, collector.Stop(t.Context()))
-
-	assertEmittedEntityContract(t, emitter.emitted, []any{
-		&entities.MultiFactor{},
-		&entities.AccountMultiFactor{},
-	}, (&options.AWSMFAEntityCollectorOptions{}).GetSpaces())
 }
 
 func newAWSContractFeatureContext[T connector.FeatureOptions](

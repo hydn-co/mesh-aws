@@ -38,16 +38,14 @@ type AWSScopeOptionsCore struct {
 	SkipManagementAccount bool            `json:"skip_management_account,omitempty" title:"Skip Management Account" description:"Exclude the management/delegated account from per-account collection."                                                                                                                                                          x-enabled-by:"mode:organization"`
 }
 
-// GetMode returns the normalized collection mode, defaulting to single.
+// GetMode returns the normalized (lower-cased, trimmed) collection mode, or an
+// empty string when unset. Mode is required; there is no implicit default. An
+// empty or unrecognized mode is rejected by Validate.
 func (o *AWSScopeOptionsCore) GetMode() string {
 	if o == nil {
-		return ModeSingle
+		return ""
 	}
-	mode := strings.ToLower(strings.TrimSpace(o.Mode))
-	if mode == "" {
-		return ModeSingle
-	}
-	return mode
+	return strings.ToLower(strings.TrimSpace(o.Mode))
 }
 
 // IsOrganizationMode reports whether the collector should fan out across the organization.
@@ -119,8 +117,8 @@ func (o *AWSScopeOptionsCore) GetRegions() []string {
 	return o.Regions
 }
 
-// Validate checks mode-dependent invariants. Single mode (the default) imposes no
-// extra requirements, preserving backward compatibility.
+// Validate checks mode-dependent invariants. Mode is required: an empty or
+// unrecognized mode is rejected. Single mode imposes no further requirements.
 func (o *AWSScopeOptionsCore) Validate() error {
 	if o == nil {
 		return nil
@@ -132,7 +130,7 @@ func (o *AWSScopeOptionsCore) Validate() error {
 	case ModeOrganization:
 		return o.validateOrganization()
 	default:
-		return fmt.Errorf("mode must be %q or %q", ModeSingle, ModeOrganization)
+		return fmt.Errorf("mode is required and must be %q or %q", ModeSingle, ModeOrganization)
 	}
 }
 

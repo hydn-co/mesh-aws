@@ -25,10 +25,11 @@ type awsPolicyEntityClientFactory func(creds *api.AWSCredentials, region, sessio
 // AWSPolicyEntityCollector collects AWS IAM managed policy entities.
 type AWSPolicyEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSPolicyEntityCollectorOptions, *connector.NoPayload]
-	client    awsPolicyEntityClient
-	newClient awsPolicyEntityClientFactory
-	resolver  *scope.Resolver
-	state     connectorutil.FeatureState
+	client       awsPolicyEntityClient
+	newClient    awsPolicyEntityClientFactory
+	resolver     *scope.Resolver
+	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	state        connectorutil.FeatureState
 }
 
 // NewAWSPolicyEntityCollector constructs the collector with the given feature context.
@@ -70,14 +71,17 @@ func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
 	if c.newClient == nil {
 		c.newClient = defaultAWSPolicyEntityClientFactory
 	}
+	resolverOpts := append([]scope.Option{
+		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
+			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
+		}),
+	}, c.resolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
 		opts.GetSessionToken(),
 		creds,
-		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
-			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
-		}),
+		resolverOpts...,
 	)
 	c.state.MarkReady()
 	return nil
