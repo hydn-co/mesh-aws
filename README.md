@@ -6,7 +6,8 @@ AWS mesh connector for collecting IAM, Identity Store, Organizations, CloudTrail
 
 - `aws_account_entity_collector` emits account entities for IAM users, Identity Store users, the Organizations management account, group membership links, and `AccountRole` links derived from each role's trust policy (the AWS principals permitted to assume the role).
 - `aws_group_entity_collector` emits group entities for IAM groups and Identity Store groups.
-- `aws_role_entity_collector` emits IAM role entities plus the `Permission` and `RolePermission` links for the policies that grant each role its access (attached managed policies always; role-embedded inline policies when `collect_inline_policies` is enabled).
+- `aws_role_entity_collector` emits IAM role entities plus one `Permission` per IAM action the role's policies allow (classified into a normalized CRUDE verb) and the `RolePermission` links connecting them (attached managed policies always; role-embedded inline policies when `collect_inline_policies` is enabled).
+- `aws_resource_entity_collector` emits the scope hierarchy as `ResourceContainer` entities (the caller's account in single mode; the Organizations roots, OUs, and member accounts — nested by `ResourceContainerResourceContainer` edges — in organization mode) and the tagged-resource inventory as classified `Resource` entities linked into their account by `ResourceContainerResource` edges.
 - `aws_policy_entity_collector` emits IAM managed policy entities.
 - `aws_mfa_entity_collector` emits virtual MFA entities and account-to-MFA links.
 - `aws_login_activity_collector` emits AWS Management Console and IAM Identity Center login success/failure activity.
@@ -248,8 +249,9 @@ for a ready-to-attach policy.
 |---------|---------------------|--------|
 | `aws_account_entity_collector` | `iam:ListUsers`, `iam:ListGroupsForUser`, `iam:ListAccessKeys`, `iam:ListRoles`, `organizations:DescribeOrganization`, `identitystore:ListUsers`, `identitystore:ListGroups`, `identitystore:ListGroupMemberships` | Enumerate IAM users + access-key status, IAM group membership, Identity Store users/memberships, the management account, and role trust policies for `AccountRole` links |
 | `aws_group_entity_collector` | `iam:ListGroups`, `identitystore:ListGroups` | Enumerate IAM and Identity Store groups |
-| `aws_role_entity_collector` | `iam:ListRoles`, `iam:ListAttachedRolePolicies` | Enumerate IAM roles and their attached managed policies |
-| `aws_role_entity_collector` (when `collect_inline_policies` is on) | `iam:ListRolePolicies` | Additionally enumerate role-embedded inline policies |
+| `aws_role_entity_collector` | `iam:ListRoles`, `iam:ListAttachedRolePolicies`, `iam:GetPolicy`, `iam:GetPolicyVersion` | Enumerate IAM roles, their attached managed policies, and the IAM actions those policies allow |
+| `aws_role_entity_collector` (when `collect_inline_policies` is on) | `iam:ListRolePolicies`, `iam:GetRolePolicy` | Additionally enumerate role-embedded inline policies and their allowed actions |
+| `aws_resource_entity_collector` | `tag:GetResources`, `sts:GetCallerIdentity` (single mode), `organizations:ListRoots`, `organizations:ListOrganizationalUnitsForParent`, `organizations:ListAccountsForParent` (organization mode) | Enumerate tagged resources and the account/organization scope hierarchy |
 | `aws_policy_entity_collector` | `iam:ListPolicies` | Enumerate customer-managed IAM policies |
 | `aws_mfa_entity_collector` | `iam:ListVirtualMFADevices` | Enumerate assigned virtual MFA devices |
 | `aws_login_activity_collector` | `cloudtrail:LookupEvents` | Read console / Identity Center sign-in events |
@@ -318,6 +320,7 @@ whose access key the connector uses (replace `HyddenDiscoveryRole` if you used a
         "secretsmanager:DescribeSecret",
         "secretsmanager:GetResourcePolicy",
         "secretsmanager:ListSecretVersionIds",
+        "tag:GetResources",
         "identitystore:ListUsers",
         "identitystore:ListGroups",
         "identitystore:ListGroupMemberships",
@@ -352,13 +355,17 @@ IDs instead of `*`.
 | `iam:ListAccessKeys` | Account collector (enabled-status detection) |
 | `iam:ListRoles` | Account + role collectors |
 | `iam:ListAttachedRolePolicies` | Role collector (managed permissions) |
+| `iam:GetPolicy`, `iam:GetPolicyVersion` | Role collector (managed-policy allowed actions) |
 | `iam:ListRolePolicies` | Role collector (inline permissions, when enabled) |
+| `iam:GetRolePolicy` | Role collector (inline-policy allowed actions, when enabled) |
 | `iam:ListPolicies` | Policy collector |
 | `iam:ListVirtualMFADevices` | MFA collector |
 | `organizations:DescribeOrganization` | Account collector (management account); organization-mode management-account detection |
 | `organizations:ListAccounts` | Organization mode (enumerate member accounts) |
 | `organizations:ListAccountsForParent`, `organizations:ListRoots`, `organizations:ListOrganizationalUnitsForParent` | Organization entity collector; organization-mode OU scoping |
 | `sts:AssumeRole` | Organization mode (cross-account discovery role) |
+| `sts:GetCallerIdentity` | Resource collector (single-mode account container) |
+| `tag:GetResources` | Resource collector (tagged-resource inventory) |
 | `secretsmanager:ListSecrets` | Secret collector |
 | `identitystore:ListUsers` | Account collector (Identity Center users) |
 | `identitystore:ListGroups` | Account + group collectors (Identity Center groups) |
@@ -374,6 +381,9 @@ IDs instead of `*`.
 - Activity collectors are split by catalog type: login activity and session activity are separate features.
 - `AccountRole` links are derived from role trust policies; account-root and cross-account principal ARNs are emitted as references even when no backing `Account` entity exists in the catalog.
 - In organization mode, emitted references already embed the account ID (IAM ARNs, secret ARNs), so data from many accounts coexists in the shared catalog spaces without collisions.
+- The resource collector reads inventory from the Resource Groups Tagging API, chosen because it needs a single permission (`tag:GetResources`) and zero account setup. Its known blind spot: only resources that are or once were tagged are returned — never-tagged resources are invisible. AWS Config or Resource Explorer are future upgrades for full-inventory coverage.
+- The role collector skips Deny statements and `NotAction` grants when expanding policy documents — the catalog has no per-permission deny dimension yet (follow-up).
+- AWS emits no `ScopedAssignment` entities: plain IAM has no principal→role-at-scope object. IAM Identity Center account assignments (`sso-admin:ListInstances`/`ListPermissionSets`/`ListAccountAssignments` plus collecting permission sets as roles) are the natural source and are tracked as a follow-up.
 - Organization mode currently targets the standard `aws` partition; GovCloud (`aws-us-gov`) and China (`aws-cn`) partitions are not yet handled in the assumed-role ARN.
 - Activity collectors share a single resume cursor across all accounts in organization mode; duplicate event references are de-duplicated by the catalog's distinct identity.
 

@@ -9,10 +9,10 @@ import (
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
-	"github.com/hydn-co/mesh-sdk/pkg/entitlements"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
+	"github.com/hydn-co/mesh-aws/internal/mappings"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
@@ -21,6 +21,8 @@ type awsRoleEntityClient interface {
 	IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMRole]
 	IAMAttachedRolePolicyEnumerator(ctx context.Context, roleName string) enumerators.Enumerator[api.IAMAttachedPolicy]
 	IAMInlineRolePolicyEnumerator(ctx context.Context, roleName string) enumerators.Enumerator[string]
+	IAMManagedPolicyActions(ctx context.Context, policyArn string) ([]string, error)
+	IAMInlineRolePolicyActions(ctx context.Context, roleName, policyName string) ([]string, error)
 }
 
 type awsRoleEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsRoleEntityClient, error)
@@ -101,17 +103,22 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 	connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelInfo, "Starting AWS role entity collector")
 
 	collectInline := c.GetOptions().GetCollectInlinePolicies()
-	counts := rolePermissionCounts{}
-	// seenResources dedups derived Resource entities across the whole run: a
-	// resource (e.g. "s3") is typically inferred from many permissions, but the
-	// catalog only needs it emitted once. IAM is global per account, so a single
-	// target per account (the resolver passes nil/global region) is collected.
-	seenResources := map[string]struct{}{}
+	// The dedupe sets and the managed-policy action cache span the whole run: a
+	// permission (IAM action) is granted by many roles but the catalog only needs
+	// it emitted once, and AWS-managed policy ARNs repeat across roles and
+	// accounts so their documents are only resolved once. IAM is global per
+	// account, so a single target per account (the resolver passes nil/global
+	// region) is collected.
+	state := &roleCollectionState{
+		seenPermissions:      map[string]struct{}{},
+		seenRolePermissions:  map[string]struct{}{},
+		managedPolicyActions: map[string][]string{},
+	}
 
 	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
 		func(ctx context.Context, client awsRoleEntityClient, _ scope.Target) error {
 			c.client = client
-			return c.collectRoles(ctx, collectInline, seenResources, &counts)
+			return c.collectRoles(ctx, collectInline, state)
 		}); err != nil {
 		return err
 	}
@@ -122,11 +129,11 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 		slog.LevelInfo,
 		"Finished AWS role entity collector",
 		"roles_emitted",
-		counts.roles,
+		state.counts.roles,
 		"permissions_emitted",
-		counts.permissions,
+		state.counts.permissions,
 		"role_permissions_emitted",
-		counts.rolePermissions,
+		state.counts.rolePermissions,
 	)
 	return nil
 }
@@ -136,8 +143,7 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 func (c *AWSRoleEntityCollector) collectRoles(
 	ctx context.Context,
 	collectInline bool,
-	seenResources map[string]struct{},
-	counts *rolePermissionCounts,
+	state *roleCollectionState,
 ) error {
 	roleEnum := c.client.IAMRoleEnumerator(ctx)
 	if err := enumerators.ForEach(roleEnum, func(role api.IAMRole) error {
@@ -153,9 +159,9 @@ func (c *AWSRoleEntityCollector) collectRoles(
 		if err := c.Emit(ctx, entity); err != nil {
 			return fmt.Errorf("emit IAM role %s: %w", role.RoleID, err)
 		}
-		counts.roles++
+		state.counts.roles++
 
-		return c.emitRolePermissions(ctx, role, collectInline, seenResources, counts)
+		return c.emitRolePermissions(ctx, role, collectInline, state)
 	}); err != nil {
 		return fmt.Errorf("enumerate IAM roles: %w", err)
 	}
@@ -168,21 +174,37 @@ type rolePermissionCounts struct {
 	rolePermissions int
 }
 
-// emitRolePermissions emits Permission and RolePermission entities for the policies that grant
-// the role its access: attached managed policies always, plus inline policies when enabled. A
-// role deleted mid-enumeration (NoSuchEntity) is skipped rather than failing the whole run.
+// roleCollectionState carries the run-wide dedupe sets, the managed-policy
+// document cache, and the emission counters across targets.
+type roleCollectionState struct {
+	seenPermissions      map[string]struct{}
+	seenRolePermissions  map[string]struct{}
+	managedPolicyActions map[string][]string
+	counts               rolePermissionCounts
+}
+
+// emitRolePermissions emits Permission and RolePermission entities for each IAM
+// action granted by the policies attached to the role: attached managed policies
+// always, plus inline policies when enabled. A role deleted mid-enumeration
+// (NoSuchEntity) is skipped rather than failing the whole run, and a single
+// policy whose document cannot be fetched is logged and skipped so the role and
+// its other policies still land.
 func (c *AWSRoleEntityCollector) emitRolePermissions(
 	ctx context.Context,
 	role api.IAMRole,
 	collectInline bool,
-	seenResources map[string]struct{},
-	counts *rolePermissionCounts,
+	state *roleCollectionState,
 ) error {
-	seen := map[string]struct{}{}
-
 	attachedEnum := c.client.IAMAttachedRolePolicyEnumerator(ctx, role.RoleName)
 	if err := enumerators.ForEach(attachedEnum, func(policy api.IAMAttachedPolicy) error {
-		return c.emitPermissionLink(ctx, role.RoleID, policy.PolicyArn, policy.PolicyName, seen, seenResources, counts)
+		actions, err := c.managedPolicyActions(ctx, policy.PolicyArn, state)
+		if err != nil {
+			connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelWarn,
+				"skipping managed policy: could not resolve actions",
+				"role", role.RoleName, "policy_arn", policy.PolicyArn, "error", err.Error())
+			return nil
+		}
+		return c.emitRoleActions(ctx, role.RoleID, actions, state)
 	}); err != nil {
 		if api.IsNoSuchEntity(err) {
 			return nil
@@ -196,8 +218,14 @@ func (c *AWSRoleEntityCollector) emitRolePermissions(
 
 	inlineEnum := c.client.IAMInlineRolePolicyEnumerator(ctx, role.RoleName)
 	if err := enumerators.ForEach(inlineEnum, func(name string) error {
-		ref := role.Arn + ":inline/" + name
-		return c.emitPermissionLink(ctx, role.RoleID, ref, name, seen, seenResources, counts)
+		actions, err := c.client.IAMInlineRolePolicyActions(ctx, role.RoleName, name)
+		if err != nil {
+			connectorutil.LogFeature(ctx, c.TypedFeatureContext, slog.LevelWarn,
+				"skipping inline policy: could not resolve actions",
+				"role", role.RoleName, "policy_name", name, "error", err.Error())
+			return nil
+		}
+		return c.emitRoleActions(ctx, role.RoleID, actions, state)
 	}); err != nil {
 		if api.IsNoSuchEntity(err) {
 			return nil
@@ -208,74 +236,67 @@ func (c *AWSRoleEntityCollector) emitRolePermissions(
 	return nil
 }
 
-// emitPermissionLink emits a Permission and a RolePermission for one role/policy pair, skipping
-// permission references already emitted for this role.
-func (c *AWSRoleEntityCollector) emitPermissionLink(
+// managedPolicyActions resolves a managed policy ARN to its allowed actions via
+// the run-wide cache, fetching the policy's default version document on a miss.
+func (c *AWSRoleEntityCollector) managedPolicyActions(
 	ctx context.Context,
-	roleRef, permissionRef, name string,
-	seen map[string]struct{},
-	seenResources map[string]struct{},
-	counts *rolePermissionCounts,
-) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if permissionRef == "" {
-		return nil
-	}
-	if _, exists := seen[permissionRef]; exists {
-		return nil
-	}
-	seen[permissionRef] = struct{}{}
-
-	permission := entities.NewPermission()
-	permission.PermissionRef = permissionRef
-	permission.Name = name
-	if err := c.Emit(ctx, permission); err != nil {
-		return fmt.Errorf("emit permission %s: %w", permissionRef, err)
-	}
-	counts.permissions++
-
-	if err := c.emitDerivedResources(ctx, permission, seenResources); err != nil {
-		return err
+	policyArn string,
+	state *roleCollectionState,
+) ([]string, error) {
+	if actions, ok := state.managedPolicyActions[policyArn]; ok {
+		return actions, nil
 	}
 
-	rolePermission := entities.NewRolePermission()
-	rolePermission.RoleRef = roleRef
-	rolePermission.PermissionRef = permissionRef
-	if err := c.Emit(ctx, rolePermission); err != nil {
-		return fmt.Errorf("emit role permission %s/%s: %w", roleRef, permissionRef, err)
+	actions, err := c.client.IAMManagedPolicyActions(ctx, policyArn)
+	if err != nil {
+		return nil, err
 	}
-	counts.rolePermissions++
-
-	return nil
+	state.managedPolicyActions[policyArn] = actions
+	return actions, nil
 }
 
-// emitDerivedResources derives the Resource a permission acts on plus one
-// ResourcePermission edge per CRUDE verb it grants, emitting each. The Resource
-// is de-duplicated by resource_ref across the whole run via seenResources; the
-// edges are not, since their compound reference is already unique per permission.
-func (c *AWSRoleEntityCollector) emitDerivedResources(
+// emitRoleActions emits one Permission per IAM action (deduped run-wide,
+// classified to a CRUDE verb) and one RolePermission edge per role/action pair
+// (deduped by role|action).
+func (c *AWSRoleEntityCollector) emitRoleActions(
 	ctx context.Context,
-	permission *entities.Permission,
-	seenResources map[string]struct{},
+	roleRef string,
+	actions []string,
+	state *roleCollectionState,
 ) error {
-	resource, resourcePerms := entitlements.Derive(permission)
-	if resource != nil {
-		if _, ok := seenResources[resource.ResourceRef]; !ok {
-			seenResources[resource.ResourceRef] = struct{}{}
-			if err := c.Emit(ctx, resource); err != nil {
-				return fmt.Errorf("emit resource %s: %w", resource.ResourceRef, err)
+	for _, action := range actions {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if action == "" {
+			continue
+		}
+
+		if _, exists := state.seenPermissions[action]; !exists {
+			state.seenPermissions[action] = struct{}{}
+			permission := entities.NewPermission()
+			permission.PermissionRef = action
+			permission.Name = action
+			permission.PermissionType = mappings.MapAWSActionPermissionType(action)
+			if err := c.Emit(ctx, permission); err != nil {
+				return fmt.Errorf("emit permission %s: %w", action, err)
 			}
+			state.counts.permissions++
 		}
-	}
-	for _, rp := range resourcePerms {
-		if err := c.Emit(ctx, rp); err != nil {
-			return fmt.Errorf(
-				"emit resource permission %s/%s/%s: %w",
-				rp.PermissionRef, rp.ResourceRef, rp.PermissionType, err,
-			)
+
+		edgeKey := roleRef + "|" + action
+		if _, exists := state.seenRolePermissions[edgeKey]; exists {
+			continue
 		}
+		state.seenRolePermissions[edgeKey] = struct{}{}
+
+		rolePermission := entities.NewRolePermission()
+		rolePermission.RoleRef = roleRef
+		rolePermission.PermissionRef = action
+		if err := c.Emit(ctx, rolePermission); err != nil {
+			return fmt.Errorf("emit role permission %s/%s: %w", roleRef, action, err)
+		}
+		state.counts.rolePermissions++
 	}
 	return nil
 }

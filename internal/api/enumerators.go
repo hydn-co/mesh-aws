@@ -335,6 +335,26 @@ func (c *Client) SecretEnumerator(ctx context.Context) enumerators.Enumerator[Se
 	})
 }
 
+// TaggedResourceEnumerator returns all tagged-resource ARNs in the client's
+// region as an enumerator.
+func (c *Client) TaggedResourceEnumerator(ctx context.Context) enumerators.Enumerator[TaggedResource] {
+	paginationToken := ""
+
+	return awsPageEnumerator(ctx, func() ([]TaggedResource, bool, error) {
+		if err := ctx.Err(); err != nil {
+			return nil, false, err
+		}
+
+		resources, token, err := c.GetResources(ctx, paginationToken)
+		if err != nil {
+			return nil, false, err
+		}
+
+		paginationToken = token
+		return resources, token != "", nil
+	})
+}
+
 // CloudTrailEventEnumerator returns CloudTrail lookup events for a given event name and start time.
 func (c *Client) CloudTrailEventEnumerator(
 	ctx context.Context,

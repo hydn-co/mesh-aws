@@ -62,7 +62,7 @@ func WithManifest() *runner.Manifest {
 	manifest.MustRegisterFeature(
 		"aws_role_entity_collector",
 		"Collect Roles",
-		"Collects IAM roles as role entities.",
+		"Collects IAM roles as role entities plus the IAM actions their policies allow as permissions.",
 		runner.FeatureSchedulable,
 		runner.FeatureTypeCollector,
 		new(options.AWSRoleEntityCollectorOptions),
@@ -70,6 +70,19 @@ func WithManifest() *runner.Manifest {
 		runner.FeatureResumeBehaviorNone,
 		awsCredentials,
 		runner.Factory(entity.NewAWSRoleEntityCollector),
+	)
+
+	manifest.MustRegisterFeature(
+		"aws_resource_entity_collector",
+		"Collect Resources",
+		"Collects the account/organization scope hierarchy as resource containers and tagged AWS resources as classified resource entities.",
+		runner.FeatureSchedulable,
+		runner.FeatureTypeCollector,
+		new(options.AWSResourceEntityCollectorOptions),
+		(*connector.NoPayload)(nil),
+		runner.FeatureResumeBehaviorNone,
+		awsCredentials,
+		runner.Factory(entity.NewAWSResourceEntityCollector),
 	)
 
 	manifest.MustRegisterFeature(

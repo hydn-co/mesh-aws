@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 	"time"
 )
@@ -313,6 +314,64 @@ func statementAllowsServiceAssumeRole(statement map[string]any) bool {
 	return false
 }
 
+// extractAllowedActions returns the deduplicated, sorted IAM actions granted by
+// the Allow statements of the encoded policy document. Deny statements and
+// NotAction grants are skipped — the catalog has no per-permission deny
+// dimension yet (tracked as a follow-up).
+func extractAllowedActions(encodedPolicy string) []string {
+	if encodedPolicy == "" {
+		return nil
+	}
+
+	decodedPolicy, err := url.QueryUnescape(encodedPolicy)
+	if err != nil {
+		decodedPolicy = encodedPolicy
+	}
+
+	var policyDoc map[string]any
+	if err := json.Unmarshal([]byte(decodedPolicy), &policyDoc); err != nil {
+		return nil
+	}
+
+	statements, ok := toObjectSlice(policyDoc["Statement"])
+	if !ok {
+		return nil
+	}
+
+	seen := map[string]struct{}{}
+	actions := make([]string, 0)
+	for _, statement := range statements {
+		effect, ok := statement["Effect"].(string)
+		if !ok || !strings.EqualFold(strings.TrimSpace(effect), "Allow") {
+			continue
+		}
+
+		granted, ok := toStringSlice(statement["Action"])
+		if !ok {
+			continue
+		}
+
+		for _, action := range granted {
+			action = strings.TrimSpace(action)
+			if action == "" {
+				continue
+			}
+			if _, exists := seen[action]; exists {
+				continue
+			}
+			seen[action] = struct{}{}
+			actions = append(actions, action)
+		}
+	}
+
+	if len(actions) == 0 {
+		return nil
+	}
+
+	sort.Strings(actions)
+	return actions
+}
+
 func toObject(value any) (map[string]any, bool) {
 	object, ok := value.(map[string]any)
 	return object, ok
@@ -401,6 +460,28 @@ type listRolePoliciesResp struct {
 		} `xml:"PolicyNames"`
 		IsTruncated bool `xml:"IsTruncated"`
 	} `xml:"ListRolePoliciesResult"`
+}
+
+type getPolicyResp struct {
+	Result struct {
+		Policy struct {
+			DefaultVersionID string `xml:"DefaultVersionId"`
+		} `xml:"Policy"`
+	} `xml:"GetPolicyResult"`
+}
+
+type getPolicyVersionResp struct {
+	Result struct {
+		PolicyVersion struct {
+			Document string `xml:"Document"`
+		} `xml:"PolicyVersion"`
+	} `xml:"GetPolicyVersionResult"`
+}
+
+type getRolePolicyResp struct {
+	Result struct {
+		PolicyDocument string `xml:"PolicyDocument"`
+	} `xml:"GetRolePolicyResult"`
 }
 
 type listAccessKeysResp struct {
@@ -682,6 +763,102 @@ func (c *Client) ListRolePolicies(ctx context.Context, roleName, marker string) 
 	}
 
 	return resp.Result.PolicyNames.Members, resp.Result.IsTruncated, resp.Result.Marker, nil
+}
+
+// GetPolicy returns the default (active) version ID of the given managed policy.
+func (c *Client) GetPolicy(ctx context.Context, policyArn string) (string, error) {
+	data, err := c.iamPost(ctx, map[string]string{
+		"Action":    "GetPolicy",
+		"PolicyArn": policyArn,
+	})
+	if err != nil {
+		return "", fmt.Errorf("get policy %q: %w", policyArn, err)
+	}
+
+	var resp getPolicyResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("parse get policy response: %w", err)
+	}
+
+	return resp.Result.Policy.DefaultVersionID, nil
+}
+
+// GetPolicyVersion returns the IAM actions allowed by the given managed-policy
+// version (its URL-encoded document's Allow statements, deduplicated and sorted).
+func (c *Client) GetPolicyVersion(ctx context.Context, policyArn, versionID string) ([]string, error) {
+	data, err := c.iamPost(ctx, map[string]string{
+		"Action":    "GetPolicyVersion",
+		"PolicyArn": policyArn,
+		"VersionId": versionID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get policy version %q of %q: %w", versionID, policyArn, err)
+	}
+
+	var resp getPolicyVersionResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse get policy version response: %w", err)
+	}
+
+	return extractAllowedActions(resp.Result.PolicyVersion.Document), nil
+}
+
+// GetRolePolicy returns the IAM actions allowed by the named inline policy
+// embedded in the given role (its URL-encoded document's Allow statements,
+// deduplicated and sorted).
+func (c *Client) GetRolePolicy(ctx context.Context, roleName, policyName string) ([]string, error) {
+	data, err := c.iamPost(ctx, map[string]string{
+		"Action":     "GetRolePolicy",
+		"RoleName":   roleName,
+		"PolicyName": policyName,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("get role policy %q for %q: %w", policyName, roleName, err)
+	}
+
+	var resp getRolePolicyResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parse get role policy response: %w", err)
+	}
+
+	return extractAllowedActions(resp.Result.PolicyDocument), nil
+}
+
+// IAMManagedPolicyActions resolves a managed policy ARN to the IAM actions its
+// default version allows, retrying each call on throttling.
+func (c *Client) IAMManagedPolicyActions(ctx context.Context, policyArn string) ([]string, error) {
+	var versionID string
+	if err := awsRetryOperation(ctx, func(ctx context.Context) error {
+		var err error
+		versionID, err = c.GetPolicy(ctx, policyArn)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+
+	var actions []string
+	if err := awsRetryOperation(ctx, func(ctx context.Context) error {
+		var err error
+		actions, err = c.GetPolicyVersion(ctx, policyArn, versionID)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return actions, nil
+}
+
+// IAMInlineRolePolicyActions resolves a role's named inline policy to the IAM
+// actions it allows, retrying on throttling.
+func (c *Client) IAMInlineRolePolicyActions(ctx context.Context, roleName, policyName string) ([]string, error) {
+	var actions []string
+	if err := awsRetryOperation(ctx, func(ctx context.Context) error {
+		var err error
+		actions, err = c.GetRolePolicy(ctx, roleName, policyName)
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return actions, nil
 }
 
 // ListAccessKeys returns all access keys for the given IAM user.

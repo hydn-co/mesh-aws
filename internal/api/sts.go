@@ -95,6 +95,33 @@ func (c *Client) AssumeRole(
 	return assumed, nil
 }
 
+type getCallerIdentityResp struct {
+	Result struct {
+		Account string `xml:"Account"`
+		Arn     string `xml:"Arn"`
+		UserID  string `xml:"UserId"`
+	} `xml:"GetCallerIdentityResult"`
+}
+
+// GetCallerIdentity returns the twelve-digit account ID the client's
+// credentials belong to.
+func (c *Client) GetCallerIdentity(ctx context.Context) (string, error) {
+	data, err := c.stsPost(ctx, map[string]string{"Action": "GetCallerIdentity"})
+	if err != nil {
+		return "", fmt.Errorf("get caller identity: %w", err)
+	}
+
+	var resp getCallerIdentityResp
+	if err := xml.Unmarshal(data, &resp); err != nil {
+		return "", fmt.Errorf("parse get caller identity response: %w", err)
+	}
+
+	if resp.Result.Account == "" {
+		return "", fmt.Errorf("get caller identity: response contained no account")
+	}
+	return resp.Result.Account, nil
+}
+
 // parseSTSError maps a non-200 STS Query API response to an error. STS shares the
 // AWS Query XML error envelope (<ErrorResponse><Error><Code>/<Message>).
 func parseSTSError(body []byte, status int) error {

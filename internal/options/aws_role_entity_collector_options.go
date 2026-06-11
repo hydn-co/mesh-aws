@@ -7,7 +7,7 @@ type AWSRoleEntityCollectorOptions struct {
 	AWSConnectionOptionsCore `json:",inline"`
 	AWSScopeOptionsCore      `json:",inline"`
 
-	CollectInlinePolicies bool `json:"collect_inline_policies,omitempty" title:"Collect Inline Policies" description:"Also collect role-embedded inline policies as permissions. Adds an extra IAM call per role; managed policies are always collected."`
+	CollectInlinePolicies bool `json:"collect_inline_policies,omitempty" title:"Collect Inline Policies" description:"Also collect the IAM actions granted by role-embedded inline policies as permissions. Adds extra IAM calls per role; managed policies are always collected."`
 }
 
 func (*AWSRoleEntityCollectorOptions) GetDiscriminator() string {
@@ -16,11 +16,9 @@ func (*AWSRoleEntityCollectorOptions) GetDiscriminator() string {
 
 func (*AWSRoleEntityCollectorOptions) GetSpaces() []spaces.Space {
 	return []spaces.Space{
-		spaces.Roles,
 		spaces.Permissions,
 		spaces.RolePermissions,
-		spaces.Resources,
-		spaces.ResourcePermissions,
+		spaces.Roles,
 	}
 }
 

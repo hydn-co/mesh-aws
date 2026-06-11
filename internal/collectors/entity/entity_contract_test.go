@@ -174,6 +174,43 @@ func (fakeAWSContractClient) IAMInlineRolePolicyEnumerator(
 	return sliceEnumerator([]string{"InlineAccess"})
 }
 
+func (fakeAWSContractClient) IAMManagedPolicyActions(
+	_ context.Context,
+	policyArn string,
+) ([]string, error) {
+	if policyArn == "" {
+		panic("unexpected empty policy arn")
+	}
+	return []string{"iam:GetRole", "s3:*"}, nil
+}
+
+func (fakeAWSContractClient) IAMInlineRolePolicyActions(
+	_ context.Context,
+	roleName, policyName string,
+) ([]string, error) {
+	if roleName == "" {
+		panic("unexpected empty role name")
+	}
+	if policyName == "" {
+		panic("unexpected empty policy name")
+	}
+	return []string{"s3:PutObject"}, nil
+}
+
+func (fakeAWSContractClient) GetCallerIdentity(_ context.Context) (string, error) {
+	return "123456789012", nil
+}
+
+func (fakeAWSContractClient) TaggedResourceEnumerator(
+	_ context.Context,
+) enumerators.Enumerator[api.TaggedResource] {
+	return sliceEnumerator([]api.TaggedResource{{
+		ARN: "arn:aws:ec2:us-west-2:123456789012:instance/i-0abc123",
+	}, {
+		ARN: "arn:aws:s3:::contract-bucket",
+	}})
+}
+
 func (fakeAWSContractClient) IAMPolicyEnumerator(
 	_ context.Context,
 	scope string,
@@ -441,9 +478,107 @@ func TestShouldOnlyEmitDeclaredEntityTypesWhenRoleCollectorRunsWithInjectedClien
 				&entities.Role{},
 				&entities.Permission{},
 				&entities.RolePermission{},
-				&entities.Resource{},
-				&entities.ResourcePermission{},
 			}, (&options.AWSRoleEntityCollectorOptions{}).GetSpaces())
+		})
+	}
+}
+
+// fakeResourceOrgClient backs the resource collector's organization-tree walk
+// with a root holding the management account and one OU holding the member account.
+type fakeResourceOrgClient struct{}
+
+func (fakeResourceOrgClient) OrganizationRootEnumerator(
+	_ context.Context,
+) enumerators.Enumerator[api.OrganizationalUnit] {
+	return sliceEnumerator([]api.OrganizationalUnit{{ID: "r-1", Name: "Root"}})
+}
+
+func (fakeResourceOrgClient) OrganizationalUnitsForParentEnumerator(
+	_ context.Context,
+	parentID string,
+) enumerators.Enumerator[api.OrganizationalUnit] {
+	if parentID == "r-1" {
+		return sliceEnumerator([]api.OrganizationalUnit{{ID: "ou-1", Name: "Workloads"}})
+	}
+	return sliceEnumerator([]api.OrganizationalUnit{})
+}
+
+func (fakeResourceOrgClient) OrganizationAccountsForParentEnumerator(
+	_ context.Context,
+	parentID string,
+) enumerators.Enumerator[api.Account] {
+	switch parentID {
+	case "r-1":
+		return sliceEnumerator([]api.Account{{
+			ID:     "123456789012",
+			Name:   "management",
+			Status: api.AccountStatusActive,
+		}})
+	case "ou-1":
+		return sliceEnumerator([]api.Account{{
+			ID:     "210987654321",
+			Name:   "member",
+			Status: api.AccountStatusActive,
+		}})
+	default:
+		return sliceEnumerator([]api.Account{})
+	}
+}
+
+func TestShouldOnlyEmitDeclaredEntityTypesWhenResourceCollectorRunsWithInjectedClient(t *testing.T) {
+	testCases := []struct {
+		mode           string
+		allowedTypes   []any
+		expectedSpaces []spaces.Space
+	}{{
+		mode: options.ModeSingle,
+		allowedTypes: []any{
+			&entities.Resource{},
+			&entities.ResourceContainer{},
+			&entities.ResourceContainerResource{},
+		},
+		expectedSpaces: []spaces.Space{
+			spaces.ResourceContainerResources,
+			spaces.ResourceContainers,
+			spaces.Resources,
+		},
+	}, {
+		mode: options.ModeOrganization,
+		allowedTypes: []any{
+			&entities.Resource{},
+			&entities.ResourceContainer{},
+			&entities.ResourceContainerResource{},
+			&entities.ResourceContainerResourceContainer{},
+		},
+		expectedSpaces: (&options.AWSResourceEntityCollectorOptions{}).GetSpaces(),
+	}}
+
+	for _, tc := range testCases {
+		t.Run(tc.mode, func(t *testing.T) {
+			emitter := &captureEntityEmitter{}
+			collector := &AWSResourceEntityCollector{
+				TypedFeatureContext: newAWSContractFeatureContext(
+					t,
+					emitter,
+					&options.AWSResourceEntityCollectorOptions{
+						AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
+						AWSScopeOptionsCore:      contractScopeOptions(tc.mode),
+					},
+				),
+				newClient: func(_ *api.AWSCredentials, _, _ string) (awsResourceEntityClient, error) {
+					return fakeAWSContractClient{}, nil
+				},
+				newOrgClient: func(_ *api.AWSCredentials, _, _ string) (awsResourceOrgClient, error) {
+					return fakeResourceOrgClient{}, nil
+				},
+				resolverOpts: contractResolverOpts(),
+			}
+
+			require.NoError(t, collector.Init(t.Context()))
+			require.NoError(t, collector.Start(t.Context()))
+			require.NoError(t, collector.Stop(t.Context()))
+
+			assertEmittedEntityContract(t, emitter.emitted, tc.allowedTypes, tc.expectedSpaces)
 		})
 	}
 }
@@ -592,8 +727,12 @@ func emittedEntitySpace(item any) (spaces.Space, bool) {
 		return spaces.RolePermissions, true
 	case *entities.Resource:
 		return spaces.Resources, true
-	case *entities.ResourcePermission:
-		return spaces.ResourcePermissions, true
+	case *entities.ResourceContainer:
+		return spaces.ResourceContainers, true
+	case *entities.ResourceContainerResource:
+		return spaces.ResourceContainerResources, true
+	case *entities.ResourceContainerResourceContainer:
+		return spaces.ResourceContainerResourceContainers, true
 	case *entities.AccountRole:
 		return spaces.AccountRoles, true
 	case *entities.Policy:

@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/xml"
+	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -25,6 +27,27 @@ func TestShouldParseAssumeRoleCredentials(t *testing.T) {
 	require.Equal(t, "temp-secret", resp.Result.Credentials.SecretAccessKey)
 	require.Equal(t, "temp-token", resp.Result.Credentials.SessionToken)
 	require.Equal(t, "2026-06-04T18:00:00Z", resp.Result.Credentials.Expiration)
+}
+
+func TestShouldReturnAccountWhenGetCallerIdentitySucceeds(t *testing.T) {
+	// Arrange
+	client := newTestClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.Equal(t, "GetCallerIdentity", r.PostFormValue("Action"))
+		fmt.Fprint(w, `<GetCallerIdentityResponse xmlns="https://sts.amazonaws.com/doc/2011-06-15/">
+  <GetCallerIdentityResult>
+    <Arn>arn:aws:iam::123456789012:user/collector</Arn>
+    <UserId>AIDAEXAMPLE</UserId>
+    <Account>123456789012</Account>
+  </GetCallerIdentityResult>
+</GetCallerIdentityResponse>`)
+	}))
+
+	// Act
+	accountID, err := client.GetCallerIdentity(t.Context())
+
+	// Assert
+	require.NoError(t, err)
+	require.Equal(t, "123456789012", accountID)
 }
 
 func TestShouldParseSTSErrorBody(t *testing.T) {

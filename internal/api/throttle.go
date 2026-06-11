@@ -27,6 +27,19 @@ func awsPageEnumerator[T any](
 	}, fetchPage)
 }
 
+// awsRetryOperation runs a single (non-paginated) AWS call with the same
+// throttle-retry policy awsPageEnumerator applies to paged enumerations.
+func awsRetryOperation(ctx context.Context, operation func(ctx context.Context) error) error {
+	return connectorutil.RetryOperation(ctx, connectorutil.RetryPolicy{
+		ShouldRetry: isAWSThrottleError,
+		BaseDelay:   awsThrottleBaseDelay,
+		MaxDelay:    awsThrottleMaxDelay,
+		MaxRetries:  awsThrottleMaxRetries,
+	}, func(ctx context.Context) (connectorutil.RetryOperationResult, error) {
+		return connectorutil.RetryOperationResult{}, operation(ctx)
+	})
+}
+
 func isAWSThrottleError(err error) bool {
 	if err == nil {
 		return false
