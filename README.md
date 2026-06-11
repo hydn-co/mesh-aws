@@ -18,7 +18,6 @@ AWS mesh connector for collecting IAM, Identity Store, Organizations, CloudTrail
 - `aws_entitlement_activity_collector` emits permission and policy change activity.
 - `aws_account_activity_collector` emits account lifecycle activity.
 - `aws_cognito_user_pool_admin_activity_collector` emits Amazon Cognito user pool administrative activity.
-- `aws_organization_entity_collector` emits the AWS Organizations hierarchy (roots, organizational units, and member accounts) as `OrganizationalUnit` entities with parent references.
 - `aws_secret_entity_collector` emits AWS Secrets Manager secret metadata (ARN, name, rotation status — never secret values).
 - `aws_add_user_to_group_action` adds an IAM user to an IAM group.
 - `aws_create_user_action` creates a new IAM user.
@@ -262,7 +261,6 @@ for a ready-to-attach policy.
 | `aws_entitlement_activity_collector` | `cloudtrail:LookupEvents` | Read permission and policy change events |
 | `aws_account_activity_collector` | `cloudtrail:LookupEvents` | Read IAM user and Organizations account lifecycle events |
 | `aws_cognito_user_pool_admin_activity_collector` | `cloudtrail:LookupEvents` | Read Cognito user pool admin events |
-| `aws_organization_entity_collector` | `organizations:ListRoots`, `organizations:ListOrganizationalUnitsForParent`, `organizations:ListAccountsForParent` | Enumerate the Organizations hierarchy (roots, OUs, member accounts) |
 | `aws_secret_entity_collector` | `secretsmanager:ListSecrets` | Enumerate Secrets Manager secret metadata (no values) |
 
 ### Organization-mode management principal
@@ -362,7 +360,7 @@ IDs instead of `*`.
 | `iam:ListVirtualMFADevices` | MFA collector |
 | `organizations:DescribeOrganization` | Account collector (management account); organization-mode management-account detection |
 | `organizations:ListAccounts` | Organization mode (enumerate member accounts) |
-| `organizations:ListAccountsForParent`, `organizations:ListRoots`, `organizations:ListOrganizationalUnitsForParent` | Organization entity collector; organization-mode OU scoping |
+| `organizations:ListAccountsForParent`, `organizations:ListRoots`, `organizations:ListOrganizationalUnitsForParent` | Resource collector (organization-mode container hierarchy); organization-mode OU scoping |
 | `sts:AssumeRole` | Organization mode (cross-account discovery role) |
 | `sts:GetCallerIdentity` | Resource collector (single-mode account container) |
 | `tag:GetResources` | Resource collector (tagged-resource inventory) |

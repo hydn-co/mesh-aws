@@ -205,7 +205,8 @@ func (fakeAWSContractClient) TaggedResourceEnumerator(
 	_ context.Context,
 ) enumerators.Enumerator[api.TaggedResource] {
 	return sliceEnumerator([]api.TaggedResource{{
-		ARN: "arn:aws:ec2:us-west-2:123456789012:instance/i-0abc123",
+		ARN:  "arn:aws:ec2:us-west-2:123456789012:instance/i-0abc123",
+		Tags: map[string]string{"Name": "web-server"},
 	}, {
 		ARN: "arn:aws:s3:::contract-bucket",
 	}})

@@ -16,7 +16,6 @@ func init() {
 	polymorphic.RegisterType[AWSRoleActivityCollectorOptions]()
 	polymorphic.RegisterType[AWSEntitlementActivityCollectorOptions]()
 	polymorphic.RegisterType[AWSAccountActivityCollectorOptions]()
-	polymorphic.RegisterType[AWSOrganizationEntityCollectorOptions]()
 	polymorphic.RegisterType[AWSResourceEntityCollectorOptions]()
 	polymorphic.RegisterType[AWSSecretEntityCollectorOptions]()
 	polymorphic.RegisterType[AWSAddUserToGroupActionOptions]()

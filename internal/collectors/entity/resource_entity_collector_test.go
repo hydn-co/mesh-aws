@@ -86,10 +86,10 @@ func TestShouldEmitCallerAccountContainerAndClassifiedResourcesWhenSingleMode(t 
 	}
 	require.Len(t, resources, 2)
 	instance := resources["arn:aws:ec2:us-west-2:123456789012:instance/i-0abc123"]
-	require.Equal(t, "i-0abc123", instance.Name)
+	require.Equal(t, "web-server", instance.Name, "Name tag preferred over the opaque ARN tail")
 	require.Equal(t, types.ResourceTypeVirtualMachine, instance.ResourceType)
 	bucket := resources["arn:aws:s3:::contract-bucket"]
-	require.Equal(t, "contract-bucket", bucket.Name)
+	require.Equal(t, "contract-bucket", bucket.Name, "untagged: falls back to the ARN name segment")
 	require.Equal(t, types.ResourceTypeObjectStorage, bucket.ResourceType)
 
 	require.ElementsMatch(t, []string{

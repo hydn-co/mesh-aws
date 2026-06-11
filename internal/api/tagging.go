@@ -16,15 +16,24 @@ const (
 )
 
 // TaggedResource is one resource ARN returned by the Resource Groups Tagging
-// API. The API is the lowest-setup inventory source AWS offers (one permission,
-// no recorder or index to enable), but it only returns resources that are or
-// once were tagged — never-tagged resources are invisible to it.
+// API, with its tags. The API is the lowest-setup inventory source AWS offers
+// (one permission, no recorder or index to enable), but it only returns
+// resources that are or once were tagged — never-tagged resources are invisible
+// to it. AWS has no display-name field; the conventional human name is the
+// "Name" tag.
 type TaggedResource struct {
-	ARN string
+	Tags map[string]string
+	ARN  string
+}
+
+type taggingTagJSON struct {
+	Key   string `json:"Key"`
+	Value string `json:"Value"`
 }
 
 type taggingResourceMappingJSON struct {
-	ResourceARN string `json:"ResourceARN"`
+	ResourceARN string           `json:"ResourceARN"`
+	Tags        []taggingTagJSON `json:"Tags"`
 }
 
 type getResourcesResponse struct {
@@ -58,7 +67,11 @@ func (c *Client) GetResources(ctx context.Context, paginationToken string) ([]Ta
 
 	resources := make([]TaggedResource, len(resp.ResourceTagMappingList))
 	for i, m := range resp.ResourceTagMappingList {
-		resources[i] = TaggedResource{ARN: m.ResourceARN}
+		tags := make(map[string]string, len(m.Tags))
+		for _, tag := range m.Tags {
+			tags[tag.Key] = tag.Value
+		}
+		resources[i] = TaggedResource{ARN: m.ResourceARN, Tags: tags}
 	}
 	return resources, resp.PaginationToken, nil
 }

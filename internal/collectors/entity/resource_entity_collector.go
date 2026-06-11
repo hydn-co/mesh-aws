@@ -328,7 +328,7 @@ func (c *AWSResourceEntityCollector) collectResources(
 
 		resource := entities.NewResource()
 		resource.ResourceRef = tagged.ARN
-		resource.Name = arnResourceName(tagged.ARN)
+		resource.Name = resourceDisplayName(tagged)
 		resource.ResourceType = mappings.MapAWSResourceType(tagged.ARN)
 		if err := c.Emit(ctx, resource); err != nil {
 			return fmt.Errorf("emit resource %s: %w", tagged.ARN, err)
@@ -349,6 +349,17 @@ func (c *AWSResourceEntityCollector) collectResources(
 		return fmt.Errorf("enumerate tagged resources: %w", err)
 	}
 	return nil
+}
+
+// resourceDisplayName prefers the resource's "Name" tag — AWS has no display-name
+// field, and the Name tag is the convention for resources whose ARN tail is an
+// opaque ID (EC2 instances, volumes, VPCs) — falling back to the ARN's trailing
+// name segment.
+func resourceDisplayName(tagged api.TaggedResource) string {
+	if name := strings.TrimSpace(tagged.Tags["Name"]); name != "" {
+		return name
+	}
+	return arnResourceName(tagged.ARN)
 }
 
 // arnResourceName returns the trailing name segment of an ARN's resource part

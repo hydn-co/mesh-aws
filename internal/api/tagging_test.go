@@ -25,7 +25,7 @@ func TestShouldPaginateTaggedResourcesWhenGetResourcesReturnsToken(t *testing.T)
 			fmt.Fprint(w, `{
 				"PaginationToken": "page-2",
 				"ResourceTagMappingList": [
-					{"ResourceARN": "arn:aws:ec2:us-east-1:111111111111:instance/i-0abc"},
+					{"ResourceARN": "arn:aws:ec2:us-east-1:111111111111:instance/i-0abc", "Tags": [{"Key": "Name", "Value": "web-server"}, {"Key": "env", "Value": "prod"}]},
 					{"ResourceARN": "arn:aws:s3:::bucket-one"}
 				]
 			}`)
@@ -41,18 +41,24 @@ func TestShouldPaginateTaggedResourcesWhenGetResourcesReturnsToken(t *testing.T)
 	}))
 
 	// Act
-	arns := make([]string, 0, 3)
+	resources := make([]TaggedResource, 0, 3)
 	err := enumerators.ForEach(client.TaggedResourceEnumerator(t.Context()), func(resource TaggedResource) error {
-		arns = append(arns, resource.ARN)
+		resources = append(resources, resource)
 		return nil
 	})
 
 	// Assert
 	require.NoError(t, err)
+	arns := make([]string, 0, len(resources))
+	for _, resource := range resources {
+		arns = append(arns, resource.ARN)
+	}
 	require.Equal(t, []string{
 		"arn:aws:ec2:us-east-1:111111111111:instance/i-0abc",
 		"arn:aws:s3:::bucket-one",
 		"arn:aws:lambda:us-east-1:111111111111:function:fn-one",
 	}, arns)
+	require.Equal(t, map[string]string{"Name": "web-server", "env": "prod"}, resources[0].Tags)
+	require.Empty(t, resources[1].Tags)
 	require.Equal(t, []string{"", "page-2"}, requestTokens)
 }

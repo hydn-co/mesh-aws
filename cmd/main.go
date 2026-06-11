@@ -112,19 +112,6 @@ func WithManifest() *runner.Manifest {
 	)
 
 	manifest.MustRegisterFeature(
-		"aws_organization_entity_collector",
-		"Collect Organization Hierarchy",
-		"Collects the AWS Organizations hierarchy (roots, organizational units, and member accounts) as organizational-unit entities.",
-		runner.FeatureSchedulable,
-		runner.FeatureTypeCollector,
-		new(options.AWSOrganizationEntityCollectorOptions),
-		(*connector.NoPayload)(nil),
-		runner.FeatureResumeBehaviorNone,
-		awsCredentials,
-		runner.Factory(entity.NewAWSOrganizationEntityCollector),
-	)
-
-	manifest.MustRegisterFeature(
 		"aws_secret_entity_collector",
 		"Collect Secrets",
 		"Collects AWS Secrets Manager secret metadata (no secret values) as secret entities.",

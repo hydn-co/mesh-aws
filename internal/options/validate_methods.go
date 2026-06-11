@@ -149,17 +149,6 @@ func (o *AWSAccountActivityCollectorOptions) Validate() error {
 	return o.AWSScopeOptionsCore.Validate()
 }
 
-func (o *AWSOrganizationEntityCollectorOptions) Validate() error {
-	if o == nil {
-		return nil
-	}
-
-	if err := o.AWSConnectionOptionsCore.Validate(); err != nil {
-		return err
-	}
-	return o.AWSScopeOptionsCore.Validate()
-}
-
 func (o *AWSResourceEntityCollectorOptions) Validate() error {
 	if o == nil {
 		return nil
