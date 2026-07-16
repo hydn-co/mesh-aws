@@ -41,6 +41,14 @@ jobs:
           cache-dependency-path: "**/go.sum"
           check-latest: false
 
+      # Deps are private (hydn-co/mesh-sdk + substrate); mint a GitHub App token and
+      # configure git insteadOf + GOPRIVATE before any module fetch.
+      - name: Set up private Go module access
+        uses: hydn-co/build-tools/.github/actions/setup-go-private@main
+        with:
+          client-id: ${{ secrets.MESH_MODULES_APP_CLIENT_ID }}
+          private-key: ${{ secrets.MESH_MODULES_APP_KEY }}
+
       - name: Download Go modules
         run: go mod download
 
@@ -57,3 +65,6 @@ jobs:
 
       - name: Test
         run: go test ./... -timeout 30s
+  entity-contract:
+    uses: hydn-co/build-tools/.github/workflows/entity-contract-check.yml@main
+    secrets: inherit

@@ -9,3 +9,4 @@ permissions:
 jobs:
   release:
     uses: hydn-co/build-tools/.github/workflows/connector-release.yml@main
+    secrets: inherit

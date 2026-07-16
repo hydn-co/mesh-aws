@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/fgrzl/enumerators"
+	"github.com/hydn-co/substrate/enumerators"
 )
 
 // IAMUserEnumerator returns all IAM users as an enumerator.

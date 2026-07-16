@@ -1,6 +1,6 @@
 package options
 
-import "github.com/fgrzl/json/polymorphic"
+import "github.com/hydn-co/substrate/json/polymorphic"
 
 func init() {
 	polymorphic.RegisterType[AWSAccountEntityCollectorOptions]()

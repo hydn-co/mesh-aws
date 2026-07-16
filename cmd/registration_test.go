@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/fgrzl/json/polymorphic"
+	"github.com/hydn-co/substrate/json/polymorphic"
 	"github.com/stretchr/testify/require"
 )
 

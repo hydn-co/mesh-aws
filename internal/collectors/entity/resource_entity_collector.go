@@ -6,11 +6,11 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
+	"github.com/hydn-co/substrate/enumerators"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/mappings"
@@ -18,16 +18,20 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
-type awsResourceEntityClient interface {
+// AWSResourceEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSResourceEntityClient interface {
 	GetCallerIdentity(ctx context.Context) (string, error)
 	TaggedResourceEnumerator(ctx context.Context) enumerators.Enumerator[api.TaggedResource]
 }
 
-type awsResourceEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsResourceEntityClient, error)
+// AWSResourceEntityClientFactory constructs the collector's provider client.
+type AWSResourceEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSResourceEntityClient, error)
 
-// awsResourceOrgClient is the management-account view the collector uses to walk
+// AWSResourceOrgClient is the management-account view the collector uses to walk
 // the AWS Organizations tree into ResourceContainer entities in organization mode.
-type awsResourceOrgClient interface {
+type AWSResourceOrgClient interface {
 	OrganizationRootEnumerator(ctx context.Context) enumerators.Enumerator[api.OrganizationalUnit]
 	OrganizationalUnitsForParentEnumerator(
 		ctx context.Context,
@@ -36,7 +40,8 @@ type awsResourceOrgClient interface {
 	OrganizationAccountsForParentEnumerator(ctx context.Context, parentID string) enumerators.Enumerator[api.Account]
 }
 
-type awsResourceOrgClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsResourceOrgClient, error)
+// AWSResourceOrgClientFactory constructs the management-account Organizations client.
+type AWSResourceOrgClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSResourceOrgClient, error)
 
 // AWSResourceEntityCollector emits the AWS scope hierarchy as ResourceContainers
 // (the caller's account in single mode; the Organizations roots, OUs, and member
@@ -48,12 +53,16 @@ type awsResourceOrgClientFactory func(creds *api.AWSCredentials, region, session
 // target; only resources that are or once were tagged are returned.
 type AWSResourceEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSResourceEntityCollectorOptions, *connector.NoPayload]
-	client       awsResourceEntityClient
-	newClient    awsResourceEntityClientFactory
-	newOrgClient awsResourceOrgClientFactory
+	client AWSResourceEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient AWSResourceEntityClientFactory
+	// NewOrgClient builds the management-account Organizations client during
+	// Init; contract tests inject fakes through this seam.
+	NewOrgClient AWSResourceOrgClientFactory
 	resolver     *scope.Resolver
 	creds        *api.AWSCredentials
-	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	ResolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
 	state        connectorutil.FeatureState
 }
 
@@ -63,22 +72,22 @@ func NewAWSResourceEntityCollector(
 ) runner.Feature {
 	return &AWSResourceEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSResourceEntityClientFactory,
-		newOrgClient:        defaultAWSResourceOrgClientFactory,
+		NewClient:           defaultAWSResourceEntityClientFactory,
+		NewOrgClient:        defaultAWSResourceOrgClientFactory,
 	}
 }
 
 func defaultAWSResourceEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsResourceEntityClient, error) {
+) (AWSResourceEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
 func defaultAWSResourceOrgClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsResourceOrgClient, error) {
+) (AWSResourceOrgClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -101,17 +110,17 @@ func (c *AWSResourceEntityCollector) Init(ctx context.Context) error {
 	}
 	c.creds = &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSResourceEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSResourceEntityClientFactory
 	}
-	if c.newOrgClient == nil {
-		c.newOrgClient = defaultAWSResourceOrgClientFactory
+	if c.NewOrgClient == nil {
+		c.NewOrgClient = defaultAWSResourceOrgClientFactory
 	}
 	resolverOpts := append([]scope.Option{
 		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
 			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
 		}),
-	}, c.resolverOpts...)
+	}, c.ResolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
@@ -148,8 +157,8 @@ func (c *AWSResourceEntityCollector) Start(ctx context.Context) error {
 
 	// The Tagging API is regional, so the resolver expands organization mode to
 	// one target per (account, region).
-	if err := scope.ForEachTarget(ctx, c.resolver, true, c.newClient,
-		func(ctx context.Context, client awsResourceEntityClient, target scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, true, c.NewClient,
+		func(ctx context.Context, client AWSResourceEntityClient, target scope.Target) error {
 			c.client = client
 			accountID := target.AccountID
 			if accountID == "" {
@@ -186,7 +195,7 @@ func (c *AWSResourceEntityCollector) collectContainers(
 	opts := c.GetOptions()
 
 	if !c.resolver.IsOrganizationMode() {
-		client, err := c.newClient(c.creds, opts.GetRegion(), opts.GetSessionToken())
+		client, err := c.NewClient(c.creds, opts.GetRegion(), opts.GetSessionToken())
 		if err != nil {
 			return "", fmt.Errorf("create AWS client: %w", err)
 		}
@@ -205,7 +214,7 @@ func (c *AWSResourceEntityCollector) collectContainers(
 		return accountID, nil
 	}
 
-	mgmt, err := c.newOrgClient(c.creds, opts.GetRegion(), opts.GetSessionToken())
+	mgmt, err := c.NewOrgClient(c.creds, opts.GetRegion(), opts.GetSessionToken())
 	if err != nil {
 		return "", fmt.Errorf("create management client: %w", err)
 	}
@@ -234,7 +243,7 @@ func (c *AWSResourceEntityCollector) collectContainers(
 // dangling.
 func (c *AWSResourceEntityCollector) walkContainerTree(
 	ctx context.Context,
-	mgmt awsResourceOrgClient,
+	mgmt AWSResourceOrgClient,
 	parentID string,
 	emitted map[string]struct{},
 	counts *resourceEntityCounts,

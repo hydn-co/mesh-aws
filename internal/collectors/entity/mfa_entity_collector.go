@@ -5,31 +5,37 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
+	"github.com/hydn-co/substrate/enumerators"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
-type awsMFAEntityClient interface {
+// AWSMFAEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSMFAEntityClient interface {
 	IAMVirtualMFADeviceEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMVirtualMFADevice]
 	IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMUser]
 }
 
-type awsMFAEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsMFAEntityClient, error)
+// AWSMFAEntityClientFactory constructs the collector's provider client.
+type AWSMFAEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSMFAEntityClient, error)
 
 // AWSMFAEntityCollector collects AWS IAM MFA entities and account associations.
 type AWSMFAEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSMFAEntityCollectorOptions, *connector.NoPayload]
-	client       awsMFAEntityClient
-	newClient    awsMFAEntityClientFactory
+	client AWSMFAEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient    AWSMFAEntityClientFactory
 	resolver     *scope.Resolver
-	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	ResolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
 	state        connectorutil.FeatureState
 }
 
@@ -39,14 +45,14 @@ func NewAWSMFAEntityCollector(
 ) runner.Feature {
 	return &AWSMFAEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSMFAEntityClientFactory,
+		NewClient:           defaultAWSMFAEntityClientFactory,
 	}
 }
 
 func defaultAWSMFAEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsMFAEntityClient, error) {
+) (AWSMFAEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -69,14 +75,14 @@ func (c *AWSMFAEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSMFAEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSMFAEntityClientFactory
 	}
 	resolverOpts := append([]scope.Option{
 		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
 			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
 		}),
-	}, c.resolverOpts...)
+	}, c.ResolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
@@ -103,8 +109,8 @@ func (c *AWSMFAEntityCollector) Start(ctx context.Context) error {
 
 	// MFA devices are an IAM (per-account) concern, so a single collector fans out
 	// across every member account in organization mode.
-	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
-		func(ctx context.Context, client awsMFAEntityClient, _ scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.NewClient,
+		func(ctx context.Context, client AWSMFAEntityClient, _ scope.Target) error {
 			c.client = client
 			return c.collectMFA(ctx, &mfasEmitted, &linksEmitted)
 		}); err != nil {

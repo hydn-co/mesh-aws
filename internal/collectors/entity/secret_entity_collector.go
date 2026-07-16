@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/connector"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
 	"github.com/hydn-co/mesh-sdk/pkg/runner"
+	"github.com/hydn-co/substrate/enumerators"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
@@ -18,19 +18,25 @@ import (
 
 const secretProvider = "aws-secrets-manager"
 
-type awsSecretEntityClient interface {
+// AWSSecretEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSSecretEntityClient interface {
 	SecretEnumerator(ctx context.Context) enumerators.Enumerator[api.Secret]
 }
 
-type awsSecretEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsSecretEntityClient, error)
+// AWSSecretEntityClientFactory constructs the collector's provider client.
+type AWSSecretEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSSecretEntityClient, error)
 
 // AWSSecretEntityCollector collects AWS Secrets Manager secret metadata. Secret
 // values are never retrieved. Secrets Manager is regional, so in organization
 // mode the collector fans out across every (account, region) target.
 type AWSSecretEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSSecretEntityCollectorOptions, *connector.NoPayload]
-	client    awsSecretEntityClient
-	newClient awsSecretEntityClientFactory
+	client AWSSecretEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient AWSSecretEntityClientFactory
 	resolver  *scope.Resolver
 	state     connectorutil.FeatureState
 }
@@ -41,14 +47,14 @@ func NewAWSSecretEntityCollector(
 ) runner.Feature {
 	return &AWSSecretEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSSecretEntityClientFactory,
+		NewClient:           defaultAWSSecretEntityClientFactory,
 	}
 }
 
 func defaultAWSSecretEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsSecretEntityClient, error) {
+) (AWSSecretEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -71,8 +77,8 @@ func (c *AWSSecretEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSSecretEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSSecretEntityClientFactory
 	}
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
@@ -101,8 +107,8 @@ func (c *AWSSecretEntityCollector) Start(ctx context.Context) error {
 
 	// Secrets Manager is regional, so the resolver expands organization mode to
 	// one target per (account, region).
-	if err := scope.ForEachTarget(ctx, c.resolver, true, c.newClient,
-		func(ctx context.Context, client awsSecretEntityClient, _ scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, true, c.NewClient,
+		func(ctx context.Context, client AWSSecretEntityClient, _ scope.Target) error {
 			c.client = client
 			return c.collectSecrets(ctx, &secretsEmitted)
 		}); err != nil {
