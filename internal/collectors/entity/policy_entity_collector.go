@@ -16,19 +16,25 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
-type awsPolicyEntityClient interface {
+// AWSPolicyEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSPolicyEntityClient interface {
 	IAMPolicyEnumerator(ctx context.Context, scope string) enumerators.Enumerator[api.IAMPolicy]
 }
 
-type awsPolicyEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsPolicyEntityClient, error)
+// AWSPolicyEntityClientFactory constructs the collector's provider client.
+type AWSPolicyEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSPolicyEntityClient, error)
 
 // AWSPolicyEntityCollector collects AWS IAM managed policy entities.
 type AWSPolicyEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSPolicyEntityCollectorOptions, *connector.NoPayload]
-	client       awsPolicyEntityClient
-	newClient    awsPolicyEntityClientFactory
+	client AWSPolicyEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient    AWSPolicyEntityClientFactory
 	resolver     *scope.Resolver
-	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	ResolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
 	state        connectorutil.FeatureState
 }
 
@@ -38,14 +44,14 @@ func NewAWSPolicyEntityCollector(
 ) runner.Feature {
 	return &AWSPolicyEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSPolicyEntityClientFactory,
+		NewClient:           defaultAWSPolicyEntityClientFactory,
 	}
 }
 
 func defaultAWSPolicyEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsPolicyEntityClient, error) {
+) (AWSPolicyEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -68,14 +74,14 @@ func (c *AWSPolicyEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSPolicyEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSPolicyEntityClientFactory
 	}
 	resolverOpts := append([]scope.Option{
 		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
 			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
 		}),
-	}, c.resolverOpts...)
+	}, c.ResolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
@@ -101,8 +107,8 @@ func (c *AWSPolicyEntityCollector) Start(ctx context.Context) error {
 
 	// IAM managed policies are collected per account so a single collector fans
 	// out across every member account in organization mode.
-	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
-		func(ctx context.Context, client awsPolicyEntityClient, _ scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.NewClient,
+		func(ctx context.Context, client AWSPolicyEntityClient, _ scope.Target) error {
 			c.client = client
 			return c.collectPolicies(ctx, &policiesEmitted)
 		}); err != nil {

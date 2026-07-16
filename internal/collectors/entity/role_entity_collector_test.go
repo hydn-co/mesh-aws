@@ -79,7 +79,7 @@ func newRoleCollectorWithClient(
 			AWSScopeOptionsCore:      contractScopeOptions(options.ModeSingle),
 			CollectInlinePolicies:    collectInline,
 		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsRoleEntityClient, error) {
+		NewClient: func(_ *api.AWSCredentials, _, _ string) (AWSRoleEntityClient, error) {
 			return client, nil
 		},
 	}

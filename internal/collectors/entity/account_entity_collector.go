@@ -17,7 +17,10 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
-type awsAccountEntityClient interface {
+// AWSAccountEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSAccountEntityClient interface {
 	IAMUserEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMUser]
 	IAMGroupsForUserEnumerator(ctx context.Context, userName string) enumerators.Enumerator[api.IAMGroup]
 	IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMRole]
@@ -37,16 +40,19 @@ type awsAccountEntityClient interface {
 	ListAccessKeys(ctx context.Context, userName string) ([]api.IAMAccessKey, error)
 }
 
-type awsAccountEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsAccountEntityClient, error)
+// AWSAccountEntityClientFactory constructs the collector's provider client.
+type AWSAccountEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSAccountEntityClient, error)
 
 // AWSAccountEntityCollector collects AWS account-related entities and membership links.
 type AWSAccountEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSAccountEntityCollectorOptions, *connector.NoPayload]
-	client       awsAccountEntityClient
-	newClient    awsAccountEntityClientFactory
+	client AWSAccountEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient    AWSAccountEntityClientFactory
 	resolver     *scope.Resolver
 	mgmtCreds    *api.AWSCredentials
-	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	ResolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
 	state        connectorutil.FeatureState
 }
 
@@ -56,14 +62,14 @@ func NewAWSAccountEntityCollector(
 ) runner.Feature {
 	return &AWSAccountEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSAccountEntityClientFactory,
+		NewClient:           defaultAWSAccountEntityClientFactory,
 	}
 }
 
 func defaultAWSAccountEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsAccountEntityClient, error) {
+) (AWSAccountEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -86,15 +92,15 @@ func (c *AWSAccountEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSAccountEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSAccountEntityClientFactory
 	}
 	c.mgmtCreds = creds
 	resolverOpts := append([]scope.Option{
 		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
 			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
 		}),
-	}, c.resolverOpts...)
+	}, c.ResolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
@@ -123,8 +129,8 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 
 	// IAM users, roles, and the account itself are collected per account so a
 	// single collector fans out across every member account in organization mode.
-	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
-		func(ctx context.Context, client awsAccountEntityClient, target scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.NewClient,
+		func(ctx context.Context, client AWSAccountEntityClient, target scope.Target) error {
 			c.client = client
 			if err := c.emitIAMAccountsAndMemberships(ctx, &accountsEmitted, &membershipsEmitted); err != nil {
 				return err
@@ -141,7 +147,7 @@ func (c *AWSAccountEntityCollector) Start(ctx context.Context) error {
 	// accounts, so its users, groups, and memberships are collected once using
 	// management credentials rather than per member account.
 	if identityStoreID := opts.GetIdentityStoreID(); identityStoreID != "" {
-		mgmtClient, err := c.newClient(c.mgmtCreds, opts.GetRegion(), opts.GetSessionToken())
+		mgmtClient, err := c.NewClient(c.mgmtCreds, opts.GetRegion(), opts.GetSessionToken())
 		if err != nil {
 			return fmt.Errorf("create AWS client: %w", err)
 		}

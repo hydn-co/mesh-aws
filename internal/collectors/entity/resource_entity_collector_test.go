@@ -1,15 +1,78 @@
 package entity
 
 import (
+	"context"
 	"testing"
 
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
+	"github.com/hydn-co/substrate/enumerators"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 	"github.com/hydn-co/mesh-aws/internal/options"
 )
+
+// fakeResourceInventoryClient serves the caller identity and tagged-resource
+// inventory the resource collector reads per target.
+type fakeResourceInventoryClient struct{}
+
+func (fakeResourceInventoryClient) GetCallerIdentity(_ context.Context) (string, error) {
+	return "123456789012", nil
+}
+
+func (fakeResourceInventoryClient) TaggedResourceEnumerator(
+	_ context.Context,
+) enumerators.Enumerator[api.TaggedResource] {
+	return sliceEnumerator([]api.TaggedResource{{
+		ARN:  "arn:aws:ec2:us-west-2:123456789012:instance/i-0abc123",
+		Tags: map[string]string{"Name": "web-server"},
+	}, {
+		ARN: "arn:aws:s3:::contract-bucket",
+	}})
+}
+
+// fakeResourceOrgClient backs the resource collector's organization-tree walk
+// with a root holding the management account and one OU holding the member account.
+type fakeResourceOrgClient struct{}
+
+func (fakeResourceOrgClient) OrganizationRootEnumerator(
+	_ context.Context,
+) enumerators.Enumerator[api.OrganizationalUnit] {
+	return sliceEnumerator([]api.OrganizationalUnit{{ID: "r-1", Name: "Root"}})
+}
+
+func (fakeResourceOrgClient) OrganizationalUnitsForParentEnumerator(
+	_ context.Context,
+	parentID string,
+) enumerators.Enumerator[api.OrganizationalUnit] {
+	if parentID == "r-1" {
+		return sliceEnumerator([]api.OrganizationalUnit{{ID: "ou-1", Name: "Workloads"}})
+	}
+	return sliceEnumerator([]api.OrganizationalUnit{})
+}
+
+func (fakeResourceOrgClient) OrganizationAccountsForParentEnumerator(
+	_ context.Context,
+	parentID string,
+) enumerators.Enumerator[api.Account] {
+	switch parentID {
+	case "r-1":
+		return sliceEnumerator([]api.Account{{
+			ID:     "123456789012",
+			Name:   "management",
+			Status: api.AccountStatusActive,
+		}})
+	case "ou-1":
+		return sliceEnumerator([]api.Account{{
+			ID:     "210987654321",
+			Name:   "member",
+			Status: api.AccountStatusActive,
+		}})
+	default:
+		return sliceEnumerator([]api.Account{})
+	}
+}
 
 func newResourceCollectorForMode(
 	t *testing.T,
@@ -23,13 +86,13 @@ func newResourceCollectorForMode(
 			AWSConnectionOptionsCore: options.AWSConnectionOptionsCore{Region: "us-west-2"},
 			AWSScopeOptionsCore:      contractScopeOptions(mode),
 		}),
-		newClient: func(_ *api.AWSCredentials, _, _ string) (awsResourceEntityClient, error) {
-			return fakeAWSContractClient{}, nil
+		NewClient: func(_ *api.AWSCredentials, _, _ string) (AWSResourceEntityClient, error) {
+			return fakeResourceInventoryClient{}, nil
 		},
-		newOrgClient: func(_ *api.AWSCredentials, _, _ string) (awsResourceOrgClient, error) {
+		NewOrgClient: func(_ *api.AWSCredentials, _, _ string) (AWSResourceOrgClient, error) {
 			return fakeResourceOrgClient{}, nil
 		},
-		resolverOpts: contractResolverOpts(),
+		ResolverOpts: contractResolverOpts(),
 	}
 }
 

@@ -17,7 +17,10 @@ import (
 	"github.com/hydn-co/mesh-aws/internal/scope"
 )
 
-type awsRoleEntityClient interface {
+// AWSRoleEntityClient is the provider API surface this collector consumes. It is
+// exported (with the NewClient seam) so the parent-package contract tests
+// can inject a fake client.
+type AWSRoleEntityClient interface {
 	IAMRoleEnumerator(ctx context.Context) enumerators.Enumerator[api.IAMRole]
 	IAMAttachedRolePolicyEnumerator(ctx context.Context, roleName string) enumerators.Enumerator[api.IAMAttachedPolicy]
 	IAMInlineRolePolicyEnumerator(ctx context.Context, roleName string) enumerators.Enumerator[string]
@@ -25,15 +28,18 @@ type awsRoleEntityClient interface {
 	IAMInlineRolePolicyActions(ctx context.Context, roleName, policyName string) ([]string, error)
 }
 
-type awsRoleEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (awsRoleEntityClient, error)
+// AWSRoleEntityClientFactory constructs the collector's provider client.
+type AWSRoleEntityClientFactory func(creds *api.AWSCredentials, region, sessionToken string) (AWSRoleEntityClient, error)
 
 // AWSRoleEntityCollector collects AWS IAM role entities.
 type AWSRoleEntityCollector struct {
 	*connector.TypedFeatureContext[*options.AWSRoleEntityCollectorOptions, *connector.NoPayload]
-	client       awsRoleEntityClient
-	newClient    awsRoleEntityClientFactory
+	client AWSRoleEntityClient
+	// NewClient builds the provider client during Init; contract tests
+	// inject fakes through this seam.
+	NewClient    AWSRoleEntityClientFactory
 	resolver     *scope.Resolver
-	resolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
+	ResolverOpts []scope.Option // extra Resolver options; tests inject a fake OrgClient factory
 	state        connectorutil.FeatureState
 }
 
@@ -43,14 +49,14 @@ func NewAWSRoleEntityCollector(
 ) runner.Feature {
 	return &AWSRoleEntityCollector{
 		TypedFeatureContext: ctx,
-		newClient:           defaultAWSRoleEntityClientFactory,
+		NewClient:           defaultAWSRoleEntityClientFactory,
 	}
 }
 
 func defaultAWSRoleEntityClientFactory(
 	creds *api.AWSCredentials,
 	region, sessionToken string,
-) (awsRoleEntityClient, error) {
+) (AWSRoleEntityClient, error) {
 	return api.NewClient(creds, region, sessionToken)
 }
 
@@ -73,14 +79,14 @@ func (c *AWSRoleEntityCollector) Init(ctx context.Context) error {
 	}
 	creds := &api.AWSCredentials{AccessKeyID: accessKeyID, SecretAccessKey: secretAccessKey}
 
-	if c.newClient == nil {
-		c.newClient = defaultAWSRoleEntityClientFactory
+	if c.NewClient == nil {
+		c.NewClient = defaultAWSRoleEntityClientFactory
 	}
 	resolverOpts := append([]scope.Option{
 		scope.WithLogger(func(level slog.Level, msg string, args ...any) {
 			connectorutil.LogFeature(context.Background(), c.TypedFeatureContext, level, msg, args...)
 		}),
-	}, c.resolverOpts...)
+	}, c.ResolverOpts...)
 	c.resolver = scope.NewResolver(
 		&opts.AWSScopeOptionsCore,
 		opts.GetRegion(),
@@ -115,8 +121,8 @@ func (c *AWSRoleEntityCollector) Start(ctx context.Context) error {
 		managedPolicyActions: map[string][]string{},
 	}
 
-	if err := scope.ForEachTarget(ctx, c.resolver, false, c.newClient,
-		func(ctx context.Context, client awsRoleEntityClient, _ scope.Target) error {
+	if err := scope.ForEachTarget(ctx, c.resolver, false, c.NewClient,
+		func(ctx context.Context, client AWSRoleEntityClient, _ scope.Target) error {
 			c.client = client
 			return c.collectRoles(ctx, collectInline, state)
 		}); err != nil {
