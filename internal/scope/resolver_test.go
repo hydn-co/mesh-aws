@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/fgrzl/enumerators"
+	"github.com/hydn-co/substrate/enumerators"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-aws/internal/api"

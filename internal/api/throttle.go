@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/connectorutil"
+	"github.com/hydn-co/substrate/enumerators"
 )
 
 const (

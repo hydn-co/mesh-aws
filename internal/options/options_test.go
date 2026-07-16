@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fgrzl/json/polymorphic"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/spaces"
+	"github.com/hydn-co/substrate/json/polymorphic"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

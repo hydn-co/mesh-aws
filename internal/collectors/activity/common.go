@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/events"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
+	"github.com/hydn-co/substrate/enumerators"
 
 	"github.com/hydn-co/mesh-aws/internal/api"
 )

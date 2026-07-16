@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/fgrzl/enumerators"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/entities"
 	"github.com/hydn-co/mesh-sdk/pkg/catalog/types"
+	"github.com/hydn-co/substrate/enumerators"
 	"github.com/stretchr/testify/require"
 
 	"github.com/hydn-co/mesh-aws/internal/api"

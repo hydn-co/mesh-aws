@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/fgrzl/enumerators"
+	"github.com/hydn-co/substrate/enumerators"
 	"github.com/stretchr/testify/require"
 )
 
