@@ -9,6 +9,7 @@ on:
   push:
     branches:
       - "**"
+      - "!dependabot/**"
   pull_request:
     branches:
       - main
@@ -26,6 +27,7 @@ defaults:
 
 jobs:
   ci:
+    if: github.actor != 'dependabot[bot]'
     name: CI
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -66,5 +68,6 @@ jobs:
       - name: Test
         run: go test ./... -timeout 30s
   entity-contract:
+    if: github.actor != 'dependabot[bot]'
     uses: hydn-co/build-tools/.github/workflows/entity-contract-check.yml@main
     secrets: inherit
